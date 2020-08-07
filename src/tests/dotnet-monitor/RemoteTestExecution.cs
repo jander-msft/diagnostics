@@ -42,12 +42,12 @@ namespace DotnetMonitor.UnitTests
             TestRunner.StandardInput.Flush();
         }
 
-        public static RemoteTestExecution StartProcess(string commandLine, ITestOutputHelper outputHelper, string reversedServerTransportName = null)
+        public static RemoteTestExecution StartProcess(string commandLine, ITestOutputHelper outputHelper, string diagnosticPortTransportName = null)
         {
             TestRunner runner = new TestRunner(commandLine, outputHelper, redirectError: true, redirectInput: true);
-            if (!string.IsNullOrEmpty(reversedServerTransportName))
+            if (!string.IsNullOrEmpty(diagnosticPortTransportName))
             {
-                runner.AddReversedServer(reversedServerTransportName);
+                runner.AddDiagnosticPortListener(diagnosticPortTransportName);
             }
             runner.Start();
 

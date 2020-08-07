@@ -11,7 +11,7 @@ using Microsoft.Diagnostics.NETCore.Client;
 
 namespace Microsoft.Diagnostics.Monitoring
 {
-    internal sealed class ClientEndpointInfoSource : IEndpointInfoSourceInternal
+    internal sealed class ConnectModeEndpointInfoSource : IEndpointInfoSourceInternal
     {
         public Task<IEnumerable<IEndpointInfo>> GetEndpointInfoAsync(CancellationToken token)
         {
@@ -30,7 +30,7 @@ namespace Microsoft.Diagnostics.Monitoring
         {
             public EndpointInfo(int processId)
             {
-                Endpoint = new PidIpcEndpoint(processId);
+                Endpoint = new ConnectModeIpcEndpoint(processId);
                 ProcessId = processId;
             }
 

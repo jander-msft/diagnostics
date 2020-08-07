@@ -30,7 +30,7 @@ namespace Microsoft.Diagnostics.Tools.Monitor
               {
                 // Handler
                 CommandHandler.Create<CancellationToken, IConsole, string[], string[], bool, string>(new DiagnosticsMonitorCommandHandler().Start),
-                Urls(), MetricUrls(), ProvideMetrics(), ReversedServerAddress()
+                Urls(), MetricUrls(), ProvideMetrics(), DiagnosticPort()
               };
 
         private static Option Urls() =>
@@ -57,12 +57,12 @@ namespace Microsoft.Diagnostics.Tools.Monitor
                 Argument = new Argument<bool>(name: "metrics", defaultValue: true )
             };
 
-        private static Option ReversedServerAddress() =>
+        private static Option DiagnosticPort() =>
             new Option(
-                alias: "--reversed-server-address",
-                description: "A fully qualified path and filename for the OS transport to communicate over.")
+                alias: "--diagnostic-port",
+                description: "A fully qualified path and filename at which a listening diagnostic port is established.")
             {
-                Argument = new Argument<string>(name: "reversedServerAddress")
+                Argument = new Argument<string>(name: "diagnosticPort")
             };
 
         private static string GetDefaultMetricsEndpoint()

@@ -31,10 +31,10 @@ namespace Microsoft.Diagnostics.Tools.Monitor
             switch (_configuration.ConnectionMode)
             {
                 case DiagnosticPortConnectionMode.Connect:
-                    _source = new ClientEndpointInfoSource();
+                    _source = new ConnectModeEndpointInfoSource();
                     break;
                 case DiagnosticPortConnectionMode.Listen:
-                    _source = new ServerEndpointInfoSource(_configuration.EndpointName);
+                    _source = new ListenModeEndpointInfoSource(_configuration.EndpointName);
                     break;
                 default:
                     throw new InvalidOperationException($"Unhandled connection mode: {_configuration.ConnectionMode}");
@@ -101,9 +101,9 @@ namespace Microsoft.Diagnostics.Tools.Monitor
 
         public void Start()
         {
-            if (_source is ServerEndpointInfoSource source)
+            if (_source is ListenModeEndpointInfoSource source)
             {
-                source.Start(_configuration.MaxConnections.GetValueOrDefault(ReversedDiagnosticsServer.MaxAllowedConnections));
+                source.Start(_configuration.MaxConnections.GetValueOrDefault(DiagnosticPortListener.MaxAllowedConnections));
             }
         }
     }

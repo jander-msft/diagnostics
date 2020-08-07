@@ -23,13 +23,13 @@ namespace DotnetMonitor.UnitTests
         }
 
         /// <summary>
-        /// Tests that other <see cref="ServerEndpointInfoSource"> methods throw if
-        /// <see cref="ServerEndpointInfoSource.Start"/> is not called.
+        /// Tests that other <see cref="ListenModeEndpointInfoSource"> methods throw if
+        /// <see cref="ListenModeEndpointInfoSource.Start"/> is not called.
         /// </summary>
         [Fact]
-        public async Task ServerSourceNoStartTest()
+        public async Task ListenModeSourceNoStartTest()
         {
-            await using var source = CreateServerSource(out string transportName);
+            await using var source = CreateListenModeSource(out string transportName);
             // Intentionally do not call Start
 
             TimeSpan CancellationTimeout = TimeSpan.FromSeconds(1);
@@ -40,12 +40,12 @@ namespace DotnetMonitor.UnitTests
         }
 
         /// <summary>
-        /// Tests that the server endpoint info source has not connections if no processes connect to it.
+        /// Tests that the listen mode endpoint info source has not connections if no processes connect to it.
         /// </summary>
         [Fact]
-        public async Task ServerSourceNoConnectionsTest()
+        public async Task ListenModeSourceNoConnectionsTest()
         {
-            await using var source = CreateServerSource(out _);
+            await using var source = CreateListenModeSource(out _);
             source.Start();
 
             var endpointInfos = await GetEndpointInfoAsync(source);
@@ -53,13 +53,13 @@ namespace DotnetMonitor.UnitTests
         }
 
         /// <summary>
-        /// Tests that server endpoint info source should throw ObjectDisposedException
+        /// Tests that listen mode endpoint info source should throw ObjectDisposedException
         /// from API surface after being disposed.
         /// </summary>
         [Fact]
-        public async Task ServerSourceThrowsWhenDisposedTest()
+        public async Task ListenModeSourceThrowsWhenDisposedTest()
         {
-            var source = CreateServerSource(out _);
+            var source = CreateListenModeSource(out _);
             source.Start();
 
             await source.DisposeAsync();
@@ -76,14 +76,14 @@ namespace DotnetMonitor.UnitTests
         }
 
         /// <summary>
-        /// Tests that server endpoint info source should throw an exception from
-        /// <see cref="ServerEndpointInfoSource.Start"/> and
-        /// <see cref="ServerEndpointInfoSource.Start(int)"/> after listening was already started.
+        /// Tests that listen mode endpoint info source should throw an exception from
+        /// <see cref="ListenModeEndpointInfoSource.Start"/> and
+        /// <see cref="ListenModeEndpointInfoSource.Start(int)"/> after listening was already started.
         /// </summary>
         [Fact]
-        public async Task ServerSourceThrowsWhenMultipleStartTest()
+        public async Task ListenModeSourceThrowsWhenMultipleStartTest()
         {
-            await using var source = CreateServerSource(out _);
+            await using var source = CreateListenModeSource(out _);
             source.Start();
 
             Assert.Throws<InvalidOperationException>(
@@ -94,13 +94,13 @@ namespace DotnetMonitor.UnitTests
         }
 
         /// <summary>
-        /// Tests that the server endpoint info source can properly enumerate endpoint infos when a single
+        /// Tests that the listen mode endpoint info source can properly enumerate endpoint infos when a single
         /// target connects to it and "disconnects" from it.
         /// </summary>
         [Fact(Skip = "Test fails in latest darc updates. See https://github.com/dotnet/diagnostics/issues/1482")]
-        public async Task ServerSourceAddRemoveSingleConnectionTest()
+        public async Task ListenModeSourceAddRemoveSingleConnectionTest()
         {
-            await using var source = CreateServerSource(out string transportName);
+            await using var source = CreateListenModeSource(out string transportName);
             source.Start();
 
             var endpointInfos = await GetEndpointInfoAsync(source);
@@ -129,11 +129,11 @@ namespace DotnetMonitor.UnitTests
             Assert.Empty(endpointInfos);
         }
 
-        private TestServerEndpointInfoSource CreateServerSource(out string transportName)
+        private TestListenModeEndpointInfoSource CreateListenModeSource(out string transportName)
         {
-            transportName = ReversedServerHelper.CreateServerTransportName();
-            _outputHelper.WriteLine("Starting server endpoint info source at '" + transportName + "'.");
-            return new TestServerEndpointInfoSource(transportName, _outputHelper);
+            transportName = PortListenerHelper.CreateServerTransportName();
+            _outputHelper.WriteLine("Starting endpoint info source at '" + transportName + "'.");
+            return new TestListenModeEndpointInfoSource(transportName, _outputHelper);
         }
 
         private RemoteTestExecution StartTraceeProcess(string loggerCategory, string transportName = null)
@@ -143,7 +143,7 @@ namespace DotnetMonitor.UnitTests
             return RemoteTestExecution.StartProcess(exePath + " " + loggerCategory, _outputHelper, transportName);
         }
 
-        private async Task<IEnumerable<IEndpointInfo>> GetEndpointInfoAsync(ServerEndpointInfoSource source)
+        private async Task<IEnumerable<IEndpointInfo>> GetEndpointInfoAsync(ListenModeEndpointInfoSource source)
         {
             _outputHelper.WriteLine("Getting endpoint infos.");
             using CancellationTokenSource cancellationSource = new CancellationTokenSource(TimeSpan.FromSeconds(10));
@@ -162,12 +162,12 @@ namespace DotnetMonitor.UnitTests
             Assert.NotNull(endpointInfo.Endpoint);
         }
 
-        private sealed class TestServerEndpointInfoSource : ServerEndpointInfoSource
+        private sealed class TestListenModeEndpointInfoSource : ListenModeEndpointInfoSource
         {
             private readonly ITestOutputHelper _outputHelper;
             private readonly List<TaskCompletionSource<IpcEndpointInfo>> _addedEndpointInfoSources = new List<TaskCompletionSource<IpcEndpointInfo>>();
 
-            public TestServerEndpointInfoSource(string transportPath, ITestOutputHelper outputHelper)
+            public TestListenModeEndpointInfoSource(string transportPath, ITestOutputHelper outputHelper)
                 : base(transportPath)
             {
                 _outputHelper = outputHelper;

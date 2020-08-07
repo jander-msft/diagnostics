@@ -15,10 +15,10 @@ using System.Threading.Tasks;
 namespace Microsoft.Diagnostics.NETCore.Client
 {
     /// <summary>
-    /// Establishes server endpoint for runtime instances to connect when
-    /// configured to provide diagnostic endpoints in reverse mode.
+    /// Establishes listening diagnostic port for runtime instances when
+    /// configured to connect to a diagnostic port.
     /// </summary>
-    internal sealed class ReversedDiagnosticsServer : IAsyncDisposable
+    internal sealed class DiagnosticPortListener : IAsyncDisposable
     {
         // Returns true if the handler is complete and should be removed from the list
         delegate bool StreamHandler(Guid runtimeId, Stream stream, out bool consumed);
@@ -26,11 +26,11 @@ namespace Microsoft.Diagnostics.NETCore.Client
         // Returns true if the handler is complete and should be removed from the list
         delegate bool EndpointInfoHandler(IpcEndpointInfo endpointInfo, out bool consumed);
 
-        // The amount of time to allow parsing of the advertise data before cancelling. This allows the server to
+        // The amount of time to allow parsing of the advertise data before cancelling. This allows the listener to
         // remain responsive in case the advertise data is incomplete and the stream is not closed.
         private static readonly TimeSpan ParseAdvertiseTimeout = TimeSpan.FromMilliseconds(250);
 
-        private readonly Dictionary<Guid, ServerIpcEndpoint> _cachedEndpoints = new Dictionary<Guid, ServerIpcEndpoint>();
+        private readonly Dictionary<Guid, ListenModeIpcEndpoint> _cachedEndpoints = new Dictionary<Guid, ListenModeIpcEndpoint>();
         private readonly Dictionary<Guid, Stream> _cachedStreams = new Dictionary<Guid, Stream>();
         private readonly CancellationTokenSource _disposalSource = new CancellationTokenSource();
         private readonly List<EndpointInfoHandler> _newEndpointInfoHandlers = new List<EndpointInfoHandler>();
@@ -44,15 +44,15 @@ namespace Microsoft.Diagnostics.NETCore.Client
         private Task _listenTask;
 
         /// <summary>
-        /// Constructs the <see cref="ReversedDiagnosticsServer"/> instance with an endpoint bound
+        /// Constructs the <see cref="DiagnosticPortListener"/> instance with an endpoint bound
         /// to the location specified by <paramref name="transportPath"/>.
         /// </summary>
         /// <param name="transportPath">
-        /// The path of the server endpoint.
+        /// The path of the listening endpoint.
         /// On Windows, this can be a full pipe path or the name without the "\\.\pipe\" prefix.
         /// On all other systems, this must be the full file path of the socket.
         /// </param>
-        public ReversedDiagnosticsServer(string transportPath)
+        public DiagnosticPortListener(string transportPath)
         {
             _transportPath = transportPath;
         }
@@ -105,21 +105,21 @@ namespace Microsoft.Diagnostics.NETCore.Client
         /// <summary>
         /// Starts listening at the transport path for new connections.
         /// </summary>
-        /// <param name="maxConnections">The maximum number of connections the server will support.</param>
+        /// <param name="maxConnections">The maximum number of connections the lisener will support.</param>
         public void Start(int maxConnections)
         {
             VerifyNotDisposed();
 
             if (IsStarted)
             {
-                throw new InvalidOperationException(nameof(ReversedDiagnosticsServer.Start) + " method can only be called once.");
+                throw new InvalidOperationException(nameof(DiagnosticPortListener.Start) + " method can only be called once.");
             }
 
             _listenTask = ListenAsync(maxConnections, _disposalSource.Token);
         }
 
         /// <summary>
-        /// Gets endpoint information when a new runtime instance connects to the server.
+        /// Gets endpoint information when a new runtime instance connects to the listener.
         /// </summary>
         /// <param name="token">The token to monitor for cancellation requests.</param>
         /// <returns>A task that completes with a <see cref="IpcEndpointInfo"/> value that contains information about the new runtime instance connection.</returns>
@@ -132,7 +132,7 @@ namespace Microsoft.Diagnostics.NETCore.Client
             var endpointInfoSource = new TaskCompletionSource<IpcEndpointInfo>(TaskCreationOptions.RunContinuationsAsynchronously);
             using var methodRegistration = token.Register(() => endpointInfoSource.TrySetCanceled(token));
             using var disposalRegistration = _disposalSource.Token.Register(
-                () => endpointInfoSource.TrySetException(new ObjectDisposedException(nameof(ReversedDiagnosticsServer))));
+                () => endpointInfoSource.TrySetException(new ObjectDisposedException(nameof(DiagnosticPortListener))));
 
             RegisterEndpointInfoHandler((IpcEndpointInfo endpointInfo, out bool consumed) =>
             {
@@ -148,7 +148,7 @@ namespace Microsoft.Diagnostics.NETCore.Client
         }
 
         /// <summary>
-        /// Removes endpoint information from the server so that it is no longer tracked.
+        /// Removes endpoint information from the listner so that it is no longer tracked.
         /// </summary>
         /// <param name="runtimeCookie">The runtime instance cookie that corresponds to the endpoint to be removed.</param>
         /// <returns>True if the endpoint existed and was removed; otherwise false.</returns>
@@ -182,7 +182,7 @@ namespace Microsoft.Diagnostics.NETCore.Client
         {
             if (_disposed)
             {
-                throw new ObjectDisposedException(nameof(ReversedDiagnosticsServer));
+                throw new ObjectDisposedException(nameof(DiagnosticPortListener));
             }
         }
 
@@ -190,16 +190,16 @@ namespace Microsoft.Diagnostics.NETCore.Client
         {
             if (!IsStarted)
             {
-                throw new InvalidOperationException(nameof(ReversedDiagnosticsServer.Start) + " method must be called before invoking this operation.");
+                throw new InvalidOperationException(nameof(DiagnosticPortListener.Start) + " method must be called before invoking this operation.");
             }
         }
 
         /// <summary>
         /// Listens at the transport path for new connections.
         /// </summary>
-        /// <param name="maxConnections">The maximum number of connections the server will support.</param>
+        /// <param name="maxConnections">The maximum number of connections the listener will support.</param>
         /// <param name="token">The token to monitor for cancellation requests.</param>
-        /// <returns>A task that completes when the server is no longer listening at the transport path.</returns>
+        /// <returns>A task that completes when the listener is no longer listening at the transport path.</returns>
         private async Task ListenAsync(int maxConnections, CancellationToken token)
         {
             using var transport = IpcServerTransport.Create(_transportPath, maxConnections);
@@ -247,7 +247,7 @@ namespace Microsoft.Diagnostics.NETCore.Client
                         ProvideStream(runtimeCookie, stream);
                         if (!_cachedEndpoints.ContainsKey(runtimeCookie))
                         {
-                            ServerIpcEndpoint endpoint = new ServerIpcEndpoint(this, runtimeCookie);
+                            ListenModeIpcEndpoint endpoint = new ListenModeIpcEndpoint(this, runtimeCookie);
                             _cachedEndpoints.Add(runtimeCookie, endpoint);
                             ProvideEndpointInfo(new IpcEndpointInfo(endpoint, pid, runtimeCookie));
                         }
@@ -259,7 +259,7 @@ namespace Microsoft.Diagnostics.NETCore.Client
         /// <remarks>
         /// This will block until the diagnostic stream is provided. This block can happen if
         /// the stream is acquired previously and the runtime instance has not yet reconnected
-        /// to the reversed diagnostics server.
+        /// to the listening diagnostic port.
         /// </remarks>
         internal Stream Connect(Guid runtimeId, TimeSpan timeout)
         {
@@ -321,7 +321,7 @@ namespace Microsoft.Diagnostics.NETCore.Client
 
             if (StreamStateDisposed == streamState)
             {
-                throw new ObjectDisposedException(nameof(ReversedDiagnosticsServer));
+                throw new ObjectDisposedException(nameof(DiagnosticPortListener));
             }
 
             return stream;
@@ -336,7 +336,7 @@ namespace Microsoft.Diagnostics.NETCore.Client
             var hasConnectedStreamSource = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             using var methodRegistration = token.Register(() => hasConnectedStreamSource.TrySetCanceled(token));
             using var disposalRegistration = _disposalSource.Token.Register(
-                () => hasConnectedStreamSource.TrySetException(new ObjectDisposedException(nameof(ReversedDiagnosticsServer))));
+                () => hasConnectedStreamSource.TrySetException(new ObjectDisposedException(nameof(DiagnosticPortListener))));
 
             RegisterStreamHandler(runtimeId, (Guid id, Stream cachedStream, out bool consumed) =>
             {

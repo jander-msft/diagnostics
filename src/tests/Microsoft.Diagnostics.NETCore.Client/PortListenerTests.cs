@@ -13,55 +13,55 @@ using Xunit.Abstractions;
 
 namespace Microsoft.Diagnostics.NETCore.Client
 {
-    public class ReversedServerTests
+    public class PortListenerTests
     {
         private readonly ITestOutputHelper _outputHelper;
 
-        public ReversedServerTests(ITestOutputHelper outputHelper)
+        public PortListenerTests(ITestOutputHelper outputHelper)
         {
             _outputHelper = outputHelper;
         }
 
         /// <summary>
-        /// Tests that server throws appropriate exceptions when not started.
+        /// Tests that listener throws appropriate exceptions when not started.
         /// </summary>
         [Fact]
-        public async Task ReversedServerNoStartTest()
+        public async Task PortListenerNoStartTest()
         {
-            await using var server = CreateReversedServer(out string transportName);
-            // Intentionally did not start server
+            await using var listener = CreatePortListener(out string transportName);
+            // Intentionally did not start listener
 
             TimeSpan CancellationTimeout = TimeSpan.FromSeconds(1);
             using CancellationTokenSource cancellation = new CancellationTokenSource(CancellationTimeout);
 
             // All API surface (except for Start) should throw InvalidOperationException
             await Assert.ThrowsAsync<InvalidOperationException>(
-                () => server.AcceptAsync(cancellation.Token));
+                () => listener.AcceptAsync(cancellation.Token));
 
             Assert.Throws<InvalidOperationException>(
-                () => server.Connect(Guid.Empty, CancellationTimeout));
+                () => listener.Connect(Guid.Empty, CancellationTimeout));
 
             Assert.Throws<InvalidOperationException>(
-                () => server.RemoveConnection(Guid.Empty));
+                () => listener.RemoveConnection(Guid.Empty));
 
             await Assert.ThrowsAsync<InvalidOperationException>(
-                () => server.WaitForConnectionAsync(Guid.Empty, cancellation.Token));
+                () => listener.WaitForConnectionAsync(Guid.Empty, cancellation.Token));
         }
 
         /// <summary>
-        /// Tests that server throws appropriate exceptions when disposed.
+        /// Tests that listener throws appropriate exceptions when disposed.
         /// </summary>
         [Fact]
-        public async Task ReversedServerDisposeTest()
+        public async Task PortListenerDisposeTest()
         {
-            var server = CreateReversedServer(out string transportName);
-            server.Start();
+            var listener = CreatePortListener(out string transportName);
+            listener.Start();
 
             using CancellationTokenSource cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(1));
-            Task acceptTask = server.AcceptAsync(cancellation.Token);
+            Task acceptTask = listener.AcceptAsync(cancellation.Token);
 
-            // Validate server surface throws after disposal
-            await server.DisposeAsync();
+            // Validate listener surface throws after disposal
+            await listener.DisposeAsync();
 
             // Pending tasks should throw ObjectDisposedException
             await Assert.ThrowsAnyAsync<ObjectDisposedException>(() => acceptTask);
@@ -69,84 +69,84 @@ namespace Microsoft.Diagnostics.NETCore.Client
 
             // Calls after dispose should throw ObjectDisposedException
             await Assert.ThrowsAsync<ObjectDisposedException>(
-                () => server.AcceptAsync(cancellation.Token));
+                () => listener.AcceptAsync(cancellation.Token));
 
             Assert.Throws<ObjectDisposedException>(
-                () => server.RemoveConnection(Guid.Empty));
+                () => listener.RemoveConnection(Guid.Empty));
         }
 
         /// <summary>
-        /// Tests that <see cref="ReversedDiagnosticsServer.AcceptAsync(CancellationToken)"/> does not complete
+        /// Tests that <see cref="DiagnosticPortListener.AcceptAsync(CancellationToken)"/> does not complete
         /// when no connections are available and that cancellation will move the returned task to the cancelled state.
         /// </summary>
         [Fact]
-        public async Task ReversedServerAcceptAsyncYieldsTest()
+        public async Task PortListenerAcceptAsyncYieldsTest()
         {
-            await using var server = CreateReversedServer(out string transportName);
-            server.Start();
+            await using var listener = CreatePortListener(out string transportName);
+            listener.Start();
 
             using var cancellationSource = new CancellationTokenSource(TimeSpan.FromSeconds(1));
 
-            _outputHelper.WriteLine("Waiting for connection from server.");
-            Task acceptTask = server.AcceptAsync(cancellationSource.Token);
+            _outputHelper.WriteLine("Waiting for connection from listener.");
+            Task acceptTask = listener.AcceptAsync(cancellationSource.Token);
 
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => acceptTask);
             Assert.True(acceptTask.IsCanceled);
         }
 
         /// <summary>
-        /// Tests that invoking server methods with non-existing runtime identifier appropriately fail.
+        /// Tests that invoking listener methods with non-existing runtime identifier appropriately fail.
         /// </summary>
         [Fact]
-        public async Task ReversedServerNonExistingRuntimeIdentifierTest()
+        public async Task PortListenerNonExistingRuntimeIdentifierTest()
         {
-            await using var server = CreateReversedServer(out string transportName);
-            server.Start();
+            await using var listener = CreatePortListener(out string transportName);
+            listener.Start();
 
             Guid nonExistingRuntimeId = Guid.NewGuid();
 
             using CancellationTokenSource cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(1));
 
-            _outputHelper.WriteLine($"Testing {nameof(ReversedDiagnosticsServer.WaitForConnectionAsync)}");
+            _outputHelper.WriteLine($"Testing {nameof(DiagnosticPortListener.WaitForConnectionAsync)}");
             await Assert.ThrowsAsync<TaskCanceledException>(
-                () => server.WaitForConnectionAsync(nonExistingRuntimeId, cancellation.Token));
+                () => listener.WaitForConnectionAsync(nonExistingRuntimeId, cancellation.Token));
 
-            _outputHelper.WriteLine($"Testing {nameof(ReversedDiagnosticsServer.Connect)}");
+            _outputHelper.WriteLine($"Testing {nameof(DiagnosticPortListener.Connect)}");
             Assert.Throws<TimeoutException>(
-                () => server.Connect(nonExistingRuntimeId, TimeSpan.FromSeconds(1)));
+                () => listener.Connect(nonExistingRuntimeId, TimeSpan.FromSeconds(1)));
 
-            _outputHelper.WriteLine($"Testing {nameof(ReversedDiagnosticsServer.RemoveConnection)}");
-            Assert.False(server.RemoveConnection(nonExistingRuntimeId), "Removal of nonexisting connection should fail.");
+            _outputHelper.WriteLine($"Testing {nameof(DiagnosticPortListener.RemoveConnection)}");
+            Assert.False(listener.RemoveConnection(nonExistingRuntimeId), "Removal of nonexisting connection should fail.");
         }
 
         /// <summary>
-        /// Tests that a single client can connect to server, diagnostics can occur,
+        /// Tests that a single client can connect to the listener, diagnostics can occur,
         /// and multiple use of a single DiagnosticsClient is allowed.
         /// </summary>
         /// <remarks>
         /// The multiple use of a single client is important in the reverse scenario
         /// because of how the endpoint is updated with new stream information each
-        /// time the target process reconnects to the server.
+        /// time the target process reconnects to the listener.
         /// </remarks>
         [Fact(Skip = "Test fails in latest darc updates. See https://github.com/dotnet/diagnostics/issues/1482")]
-        public async Task ReversedServerSingleTargetMultipleUseClientTest()
+        public async Task PortListenerSingleTargetMultipleUseClientTest()
         {
-            await using var server = CreateReversedServer(out string transportName);
-            server.Start();
+            await using var listener = CreatePortListener(out string transportName);
+            listener.Start();
 
             TestRunner runner = null;
             IpcEndpointInfo info;
             try
             {
-                // Start client pointing to diagnostics server
+                // Start client pointing to listener
                 runner = StartTracee(transportName);
 
-                info = await AcceptAsync(server);
+                info = await AcceptAsync(listener);
 
                 await VerifyEndpointInfo(runner, info);
 
                 // There should not be any new endpoint infos
-                await VerifyNoNewEndpointInfos(server);
+                await VerifyNoNewEndpointInfos(listener);
 
                 ResumeRuntime(info);
 
@@ -164,35 +164,35 @@ namespace Microsoft.Diagnostics.NETCore.Client
             // Process exited so the endpoint should not have a valid transport anymore.
             await VerifyWaitForConnection(info, expectValid: false);
 
-            Assert.True(server.RemoveConnection(info.RuntimeInstanceCookie), "Expected to be able to remove connection from server.");
+            Assert.True(listener.RemoveConnection(info.RuntimeInstanceCookie), "Expected to be able to remove connection from listener.");
 
             // There should not be any more endpoint infos
-            await VerifyNoNewEndpointInfos(server);
+            await VerifyNoNewEndpointInfos(listener);
         }
 
         /// <summary>
         /// Tests that a DiagnosticsClient is not viable after target exists.
         /// </summary>
         [Fact(Skip = "Test fails in latest darc updates. See https://github.com/dotnet/diagnostics/issues/1482")]
-        public async Task ReversedServerSingleTargetExitsClientInviableTest()
+        public async Task PortListenerSingleTargetExitsClientInviableTest()
         {
-            await using var server = CreateReversedServer(out string transportName);
-            server.Start();
+            await using var listener = CreatePortListener(out string transportName);
+            listener.Start();
 
             TestRunner runner = null;
             IpcEndpointInfo info;
             try
             {
-                // Start client pointing to diagnostics server
+                // Start client pointing to diagnostics listener
                 runner = StartTracee(transportName);
 
                 // Get client connection
-                info = await AcceptAsync(server);
+                info = await AcceptAsync(listener);
 
                 await VerifyEndpointInfo(runner, info);
 
                 // There should not be any new endpoint infos
-                await VerifyNoNewEndpointInfos(server);
+                await VerifyNoNewEndpointInfos(listener);
 
                 ResumeRuntime(info);
 
@@ -210,31 +210,31 @@ namespace Microsoft.Diagnostics.NETCore.Client
             // Process exited so the endpoint should not have a valid transport anymore.
             await VerifyWaitForConnection(info, expectValid: false);
 
-            Assert.True(server.RemoveConnection(info.RuntimeInstanceCookie), "Expected to be able to remove connection from server.");
+            Assert.True(listener.RemoveConnection(info.RuntimeInstanceCookie), "Expected to be able to remove connection from listener.");
 
             // There should not be any more endpoint infos
-            await VerifyNoNewEndpointInfos(server);
+            await VerifyNoNewEndpointInfos(listener);
         }
 
-        private ReversedDiagnosticsServer CreateReversedServer(out string transportName)
+        private DiagnosticPortListener CreatePortListener(out string transportName)
         {
-            transportName = ReversedServerHelper.CreateServerTransportName();
-            _outputHelper.WriteLine("Starting reversed server at '" + transportName + "'.");
-            return new ReversedDiagnosticsServer(transportName);
+            transportName = PortListenerHelper.CreateServerTransportName();
+            _outputHelper.WriteLine("Starting listener at '" + transportName + "'.");
+            return new DiagnosticPortListener(transportName);
         }
 
-        private async Task<IpcEndpointInfo> AcceptAsync(ReversedDiagnosticsServer server)
+        private async Task<IpcEndpointInfo> AcceptAsync(DiagnosticPortListener listener)
         {
             using (var cancellationSource = new CancellationTokenSource(TimeSpan.FromSeconds(3)))
             {
-                return await server.AcceptAsync(cancellationSource.Token);
+                return await listener.AcceptAsync(cancellationSource.Token);
             }
         }
 
         private TestRunner StartTracee(string transportName)
         {
             _outputHelper.WriteLine("Starting tracee.");
-            return ReversedServerHelper.StartTracee(_outputHelper, transportName);
+            return PortListenerHelper.StartTracee(_outputHelper, transportName);
         }
 
         private static EventPipeProvider CreateProvider(string name)
@@ -259,13 +259,13 @@ namespace Microsoft.Diagnostics.NETCore.Client
         /// <summary>
         /// Checks that the accepter does not provide a new endpoint info.
         /// </summary>
-        private async Task VerifyNoNewEndpointInfos(ReversedDiagnosticsServer server)
+        private async Task VerifyNoNewEndpointInfos(DiagnosticPortListener listener)
         {
             _outputHelper.WriteLine("Verifying there are no more connections.");
 
             using var cancellationSource = new CancellationTokenSource(TimeSpan.FromSeconds(1));
 
-            Task acceptTask = server.AcceptAsync(cancellationSource.Token);
+            Task acceptTask = listener.AcceptAsync(cancellationSource.Token);
             await Assert.ThrowsAsync<TaskCanceledException>(() => acceptTask);
             Assert.True(acceptTask.IsCanceled);
 

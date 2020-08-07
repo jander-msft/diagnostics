@@ -33,15 +33,15 @@ namespace Microsoft.Diagnostics.NETCore.Client
         public abstract Task WaitForConnectionAsync(CancellationToken token);
     }
 
-    internal class ServerIpcEndpoint : IpcEndpoint
+    internal class ListenModeIpcEndpoint : IpcEndpoint
     {
         private readonly Guid _runtimeId;
-        private readonly ReversedDiagnosticsServer _server;
+        private readonly DiagnosticPortListener _listener;
 
-        public ServerIpcEndpoint(ReversedDiagnosticsServer server, Guid runtimeId)
+        public ListenModeIpcEndpoint(DiagnosticPortListener listener, Guid runtimeId)
         {
             _runtimeId = runtimeId;
-            _server = server;
+            _listener = listener;
         }
 
         /// <remarks>
@@ -51,31 +51,31 @@ namespace Microsoft.Diagnostics.NETCore.Client
         /// </remarks>
         public override Stream Connect(TimeSpan timeout)
         {
-            return _server.Connect(_runtimeId, timeout);
+            return _listener.Connect(_runtimeId, timeout);
         }
 
         public override async Task WaitForConnectionAsync(CancellationToken token)
         {
-            await _server.WaitForConnectionAsync(_runtimeId, token).ConfigureAwait(false);
+            await _listener.WaitForConnectionAsync(_runtimeId, token).ConfigureAwait(false);
         }
 
         public override bool Equals(object obj)
         {
-            return Equals(obj as ServerIpcEndpoint);
+            return Equals(obj as ListenModeIpcEndpoint);
         }
 
-        public bool Equals(ServerIpcEndpoint other)
+        public bool Equals(ListenModeIpcEndpoint other)
         {
-            return other != null && other._runtimeId == _runtimeId && other._server == _server;
+            return other != null && other._runtimeId == _runtimeId && other._listener == _listener;
         }
 
         public override int GetHashCode()
         {
-            return _runtimeId.GetHashCode() ^ _server.GetHashCode();
+            return _runtimeId.GetHashCode() ^ _listener.GetHashCode();
         }
     }
 
-    internal class PidIpcEndpoint : IpcEndpoint
+    internal class ConnectModeIpcEndpoint : IpcEndpoint
     {
         public static string IpcRootPath { get; } = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? @"\\.\pipe\" : Path.GetTempPath();
         public static string DiagnosticsPortPattern { get; } = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? @"^dotnet-diagnostic-(\d+)$" : @"^dotnet-diagnostic-(\d+)-(\d+)-socket$";
@@ -88,7 +88,7 @@ namespace Microsoft.Diagnostics.NETCore.Client
         /// </summary>
         /// <param name="pid">The pid of the target process</param>
         /// <returns>A reference to the IPC Transport</returns>
-        public PidIpcEndpoint(int pid)
+        public ConnectModeIpcEndpoint(int pid)
         {
             _pid = pid;
         }
@@ -191,10 +191,10 @@ namespace Microsoft.Diagnostics.NETCore.Client
 
         public override bool Equals(object obj)
         {
-            return Equals(obj as PidIpcEndpoint);
+            return Equals(obj as ConnectModeIpcEndpoint);
         }
 
-        public bool Equals(PidIpcEndpoint other)
+        public bool Equals(ConnectModeIpcEndpoint other)
         {
             return other != null && other._pid == _pid;
         }

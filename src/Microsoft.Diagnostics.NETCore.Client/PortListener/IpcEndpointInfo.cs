@@ -8,7 +8,7 @@ using System.Diagnostics;
 namespace Microsoft.Diagnostics.NETCore.Client
 {
     /// <summary>
-    /// Represents a runtine instance connection to a reversed diagnostics server.
+    /// Represents a runtine instance connection to a listening diagnostic port.
     /// </summary>
     [DebuggerDisplay("PID={ProcessId}, Cookie={RuntimeInstanceCookie}")]
     internal struct IpcEndpointInfo

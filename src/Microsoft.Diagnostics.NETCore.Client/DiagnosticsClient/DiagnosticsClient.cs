@@ -22,7 +22,7 @@ namespace Microsoft.Diagnostics.NETCore.Client
         private readonly IpcEndpoint _endpoint;
 
         public DiagnosticsClient(int processId) :
-            this(new PidIpcEndpoint(processId))
+            this(new ConnectModeIpcEndpoint(processId))
         {
         }
 
@@ -217,10 +217,10 @@ namespace Microsoft.Diagnostics.NETCore.Client
         /// </returns>
         public static IEnumerable<int> GetPublishedProcesses()
         {
-            return Directory.GetFiles(PidIpcEndpoint.IpcRootPath)
+            return Directory.GetFiles(ConnectModeIpcEndpoint.IpcRootPath)
                 .Select(namedPipe => (new FileInfo(namedPipe)).Name)
-                .Where(input => Regex.IsMatch(input, PidIpcEndpoint.DiagnosticsPortPattern))
-                .Select(input => int.Parse(Regex.Match(input, PidIpcEndpoint.DiagnosticsPortPattern).Groups[1].Value, NumberStyles.Integer))
+                .Where(input => Regex.IsMatch(input, ConnectModeIpcEndpoint.DiagnosticsPortPattern))
+                .Select(input => int.Parse(Regex.Match(input, ConnectModeIpcEndpoint.DiagnosticsPortPattern).Groups[1].Value, NumberStyles.Integer))
                 .Distinct();
         }
 

@@ -8,7 +8,7 @@ using Xunit.Abstractions;
 
 namespace Microsoft.Diagnostics.NETCore.Client
 {
-    internal static class ReversedServerHelper
+    internal static class PortListenerHelper
     {
         /// <summary>
         /// Creates a unique server name to avoid collisions from simultaneous running tests
@@ -16,7 +16,7 @@ namespace Microsoft.Diagnostics.NETCore.Client
         /// </summary>
         public static string CreateServerTransportName()
         {
-            string transportName = "DOTNET_DIAGSERVER_TESTS_" + Path.GetRandomFileName();
+            string transportName = "DOTNET_DIAGPORT_TESTS_" + Path.GetRandomFileName();
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
                 return transportName;
@@ -33,12 +33,12 @@ namespace Microsoft.Diagnostics.NETCore.Client
         public static TestRunner StartTracee(ITestOutputHelper _outputHelper, string transportName)
         {
             var runner = new TestRunner(CommonHelper.GetTraceePath(targetFramework: "net5.0"), _outputHelper);
-            runner.AddReversedServer(transportName);
+            runner.AddDiagnosticPortListener(transportName);
             runner.Start();
             return runner;
         }
 
-        public static void AddReversedServer(this TestRunner runner, string transportName)
+        public static void AddDiagnosticPortListener(this TestRunner runner, string transportName)
         {
             runner.AddEnvVar("DOTNET_DiagnosticsMonitorAddress", transportName);
         }

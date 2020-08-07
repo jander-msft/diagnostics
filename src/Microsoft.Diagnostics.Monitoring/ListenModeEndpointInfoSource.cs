@@ -13,9 +13,9 @@ using Microsoft.Diagnostics.NETCore.Client;
 namespace Microsoft.Diagnostics.Monitoring
 {
     /// <summary>
-    /// Aggregates diagnostic endpoints that are established at a transport path via a reversed server.
+    /// Aggregates diagnostic endpoints that are established at a transport path via a <see cref="DiagnosticPortListener"/>.
     /// </summary>
-    internal class ServerEndpointInfoSource : IEndpointInfoSourceInternal, IAsyncDisposable
+    internal class ListenModeEndpointInfoSource : IEndpointInfoSourceInternal, IAsyncDisposable
     {
         // The amount of time to wait when checking if the a endpoint info should be
         // pruned from the list of endpoint infos. If the runtime doesn't have a viable connection within
@@ -29,18 +29,18 @@ namespace Microsoft.Diagnostics.Monitoring
 
         private Task _listenTask;
         private bool _disposed = false;
-        private ReversedDiagnosticsServer _server;
+        private DiagnosticPortListener _listener;
 
         /// <summary>
-        /// Constructs a <see cref="ServerEndpointInfoSource"/> that aggreates diagnostic endpoints
-        /// from a reversed diagnostics server at path specified by <paramref name="transportPath"/>.
+        /// Constructs a <see cref="ListenModeEndpointInfoSource"/> that aggreates diagnostic endpoints
+        /// from a <see cref="DiagnosticPortListener"/> at path specified by <paramref name="transportPath"/>.
         /// </summary>
         /// <param name="transportPath">
-        /// The path of the server endpoint.
+        /// The path of the listening endpoint.
         /// On Windows, this can be a full pipe path or the name without the "\\.\pipe\" prefix.
         /// On all other systems, this must be the full file path of the socket.
         /// </param>
-        public ServerEndpointInfoSource(string transportPath)
+        public ListenModeEndpointInfoSource(string transportPath)
         {
             _transportPath = transportPath;
         }
@@ -63,9 +63,9 @@ namespace Microsoft.Diagnostics.Monitoring
                     }
                 }
 
-                if (null != _server)
+                if (null != _listener)
                 {
-                    await _server.DisposeAsync().ConfigureAwait(false);
+                    await _listener.DisposeAsync().ConfigureAwait(false);
                 }
 
                 _endpointInfosSemaphore.Dispose();
@@ -77,33 +77,33 @@ namespace Microsoft.Diagnostics.Monitoring
         }
 
         /// <summary>
-        /// Starts listening to the reversed diagnostics server for new connections.
+        /// Starts listening to the <see cref="DiagnosticPortListener"/> for new connections.
         /// </summary>
         public void Start()
         {
-            Start(ReversedDiagnosticsServer.MaxAllowedConnections);
+            Start(DiagnosticPortListener.MaxAllowedConnections);
         }
 
         /// <summary>
-        /// Starts listening to the reversed diagnostics server for new connections.
+        /// Starts listening to the <see cref="DiagnosticPortListener"/> for new connections.
         /// </summary>
-        /// <param name="maxConnections">The maximum number of connections the server will support.</param>
+        /// <param name="maxConnections">The maximum number of connections the listener will support.</param>
         public void Start(int maxConnections)
         {
             VerifyNotDisposed();
 
             if (IsListening)
             {
-                throw new InvalidOperationException(nameof(ServerEndpointInfoSource.Start) + " method can only be called once.");
+                throw new InvalidOperationException(nameof(ListenModeEndpointInfoSource.Start) + " method can only be called once.");
             }
 
-            _server = new ReversedDiagnosticsServer(_transportPath);
+            _listener = new DiagnosticPortListener(_transportPath);
 
             _listenTask = ListenAsync(maxConnections, _cancellation.Token);
         }
 
         /// <summary>
-        /// Gets the list of <see cref="IpcEndpointInfo"/> served from the reversed diagnostics server.
+        /// Gets the list of <see cref="IpcEndpointInfo"/> served from the <see cref="DiagnosticPortListener"/>.
         /// </summary>
         /// <param name="token">The token to monitor for cancellation requests.</param>
         /// <returns>A list of active <see cref="IEndpointInfo"/> instances.</returns>
@@ -160,27 +160,27 @@ namespace Microsoft.Diagnostics.Monitoring
                 {
                     _endpointInfos.Remove(info);
                     OnRemovedEndpointInfo(info);
-                    _server?.RemoveConnection(info.RuntimeInstanceCookie);
+                    _listener?.RemoveConnection(info.RuntimeInstanceCookie);
                 }
             }
         }
 
         /// <summary>
-        /// Accepts endpoint infos from the reversed diagnostics server.
+        /// Accepts endpoint infos from the <see cref="DiagnosticPortListener"/>.
         /// </summary>
         /// <param name="token">The token to monitor for cancellation requests.</param>
         private async Task ListenAsync(int maxConnections, CancellationToken token)
         {
-            _server.Start(maxConnections);
+            _listener.Start(maxConnections);
             // Continuously accept endpoint infos from the reversed diagnostics server so
-            // that <see cref="ReversedDiagnosticsServer.AcceptAsync(CancellationToken)"/>
+            // that <see cref="DiagnosticPortListener.AcceptAsync(CancellationToken)"/>
             // is always awaited in order to to handle new runtime instance connections
             // as well as existing runtime instance reconnections.
             while (!token.IsCancellationRequested)
             {
                 try
                 {
-                    IpcEndpointInfo info = await _server.AcceptAsync(token).ConfigureAwait(false);
+                    IpcEndpointInfo info = await _listener.AcceptAsync(token).ConfigureAwait(false);
 
                     _ = Task.Run(() => ResumeAndQueueEndpointInfo(info, token), token);
                 }
@@ -194,7 +194,7 @@ namespace Microsoft.Diagnostics.Monitoring
         {
             try
             {
-                // Send ResumeRuntime message for runtime instances that connect to the server. This will allow
+                // Send ResumeRuntime message for runtime instances that connect to the listener. This will allow
                 // those instances that are configured to pause on start to resume after the diagnostics
                 // connection has been made. Instances that are not configured to pause on startup will ignore
                 // the command and return success.
@@ -222,7 +222,7 @@ namespace Microsoft.Diagnostics.Monitoring
             }
             catch (Exception)
             {
-                _server?.RemoveConnection(info.RuntimeInstanceCookie);
+                _listener?.RemoveConnection(info.RuntimeInstanceCookie);
 
                 throw;
             }
@@ -240,7 +240,7 @@ namespace Microsoft.Diagnostics.Monitoring
         {
             if (_disposed)
             {
-                throw new ObjectDisposedException(nameof(ServerEndpointInfoSource));
+                throw new ObjectDisposedException(nameof(ListenModeEndpointInfoSource));
             }
         }
 
@@ -248,11 +248,11 @@ namespace Microsoft.Diagnostics.Monitoring
         {
             if (!IsListening)
             {
-                throw new InvalidOperationException(nameof(ServerEndpointInfoSource.Start) + " method must be called before invoking this operation.");
+                throw new InvalidOperationException(nameof(ListenModeEndpointInfoSource.Start) + " method must be called before invoking this operation.");
             }
         }
 
-        private bool IsListening => null != _server && null != _listenTask;
+        private bool IsListening => null != _listener && null != _listenTask;
 
         private class EndpointInfo : IEndpointInfo
         {
