@@ -172,7 +172,7 @@ namespace DotnetMonitor.UnitTests
             private readonly List<TaskCompletionSource<IpcEndpointInfo>> _addedEndpointInfoSources = new List<TaskCompletionSource<IpcEndpointInfo>>();
 
             public TestServerEndpointInfoSource(string transportPath, ITestOutputHelper outputHelper)
-                : base(transportPath)
+                : base(transportPath, null)
             {
                 _outputHelper = outputHelper;
             }

@@ -51,13 +51,36 @@ namespace Microsoft.Diagnostics.Monitoring
                     ";ActivityId=*Activity.Id" +
                 "\r\n";
 
+        private class Keywords
+        {
+            /// <summary>
+            /// Indicates diagnostics messages from DiagnosticSourceEventSource should be included.
+            /// </summary>
+            public const EventKeywords Messages = (EventKeywords)0x1;
+            /// <summary>
+            /// Indicates that all events from all diagnostic sources should be forwarded to the EventSource using the 'Event' event.
+            /// </summary>
+            public const EventKeywords Events = (EventKeywords)0x2;
+
+            // Some ETW logic does not support passing arguments to the EventProvider.   To get around
+            // this in common cases, we define some keywords that basically stand in for particular common argumnents
+            // That way at least the common cases can be used by everyone (and it also compresses things).
+            // We start these keywords at 0x1000.   See below for the values these keywords represent
+            // Because we want all keywords on to still mean 'dump everything by default' we have another keyword
+            // IgnoreShorcutKeywords which must be OFF in order for the shortcuts to work thus the all 1s keyword
+            // still means what you expect.
+            public const EventKeywords IgnoreShortCutKeywords = (EventKeywords)0x0800;
+            public const EventKeywords AspNetCoreHosting = (EventKeywords)0x1000;
+            public const EventKeywords EntityFrameworkCoreCommands = (EventKeywords)0x2000;
+        };
+
         public override IList<EventPipeProvider> GetProviders()
         {
             var providers = new List<EventPipeProvider>()
             {
                 // Diagnostic source events
                 new EventPipeProvider(DiagnosticSourceEventSource,
-                        keywords: 0x1 | 0x2,
+                        keywords: (long)(Keywords.Messages | Keywords.Events),
                         eventLevel: EventLevel.Verbose,
                         arguments: new Dictionary<string,string>
                         {

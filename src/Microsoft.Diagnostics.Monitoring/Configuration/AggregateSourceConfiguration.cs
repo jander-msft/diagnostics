@@ -22,5 +22,9 @@ namespace Microsoft.Diagnostics.Monitoring
             // CONSIDER: Might have to deduplicate providers and merge them together.
             return _configurations.SelectMany(c => c.GetProviders()).ToList();
         }
+
+        public override bool RequestRundown => RequestRundownOverride;
+
+        public bool RequestRundownOverride { get; set; }
     }
 }

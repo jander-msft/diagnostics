@@ -105,6 +105,10 @@ namespace Microsoft.Diagnostics.Monitoring.RestServer.Controllers
                 {
                     configurations.Add(new CpuProfileConfiguration());
                 }
+                if (profile.HasFlag(TraceProfile.GC))
+                {
+                    configurations.Add(new GCSourceConfiguration(EventLevel.Verbose));
+                }
                 if (profile.HasFlag(TraceProfile.Http))
                 {
                     configurations.Add(new HttpRequestSourceConfiguration());

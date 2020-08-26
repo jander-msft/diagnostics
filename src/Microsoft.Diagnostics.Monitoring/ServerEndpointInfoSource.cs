@@ -26,6 +26,7 @@ namespace Microsoft.Diagnostics.Monitoring
         private readonly IList<IpcEndpointInfo> _endpointInfos = new List<IpcEndpointInfo>();
         private readonly SemaphoreSlim _endpointInfosSemaphore = new SemaphoreSlim(1);
         private readonly string _transportPath;
+        private readonly ITriggerServiceInternal _triggerService;
 
         private Task _listenTask;
         private bool _disposed = false;
@@ -40,9 +41,10 @@ namespace Microsoft.Diagnostics.Monitoring
         /// On Windows, this can be a full pipe path or the name without the "\\.\pipe\" prefix.
         /// On all other systems, this must be the full file path of the socket.
         /// </param>
-        public ServerEndpointInfoSource(string transportPath)
+        public ServerEndpointInfoSource(string transportPath, ITriggerService triggerService)
         {
             _transportPath = transportPath;
+            _triggerService = (ITriggerServiceInternal)triggerService;
         }
 
         public async ValueTask DisposeAsync()
@@ -194,6 +196,11 @@ namespace Microsoft.Diagnostics.Monitoring
         {
             try
             {
+                if (null != _triggerService)
+                {
+                    await _triggerService.RegisterAsync(info, token);
+                }
+
                 // Send ResumeRuntime message for runtime instances that connect to the server. This will allow
                 // those instances that are configured to pause on start to resume after the diagnostics
                 // connection has been made. Instances that are not configured to pause on startup will ignore

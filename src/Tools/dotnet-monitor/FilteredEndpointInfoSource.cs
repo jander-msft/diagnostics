@@ -25,7 +25,7 @@ namespace Microsoft.Diagnostics.Tools.Monitor
         private readonly Guid? _runtimeInstanceCookieToFilterOut;
         private readonly IEndpointInfoSourceInternal _source;
 
-        public FilteredEndpointInfoSource(IOptions<DiagnosticPortConfiguration> configuration)
+        public FilteredEndpointInfoSource(IOptions<DiagnosticPortConfiguration> configuration, ITriggerService triggerService)
         {
             _configuration = configuration.Value;
             switch (_configuration.ConnectionMode)
@@ -34,7 +34,7 @@ namespace Microsoft.Diagnostics.Tools.Monitor
                     _source = new ClientEndpointInfoSource();
                     break;
                 case DiagnosticPortConnectionMode.Listen:
-                    _source = new ServerEndpointInfoSource(_configuration.EndpointName);
+                    _source = new ServerEndpointInfoSource(_configuration.EndpointName, triggerService);
                     break;
                 default:
                     throw new InvalidOperationException($"Unhandled connection mode: {_configuration.ConnectionMode}");

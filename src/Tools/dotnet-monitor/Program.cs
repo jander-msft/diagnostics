@@ -29,8 +29,8 @@ namespace Microsoft.Diagnostics.Tools.Monitor
                   description: "Monitor logs and metrics in a .NET application send the results to a chosen destination.")
               {
                 // Handler
-                CommandHandler.Create<CancellationToken, IConsole, string[], string[], bool, string>(new DiagnosticsMonitorCommandHandler().Start),
-                Urls(), MetricUrls(), ProvideMetrics(), ReversedServerAddress()
+                CommandHandler.Create<CancellationToken, IConsole, string[], string[], bool, string, bool>(new DiagnosticsMonitorCommandHandler().Start),
+                Urls(), MetricUrls(), ProvideMetrics(), ReversedServerAddress(), ProvideTriggers()
               };
 
         private static Option Urls() =>
@@ -63,6 +63,14 @@ namespace Microsoft.Diagnostics.Tools.Monitor
                 description: "A fully qualified path and filename for the OS transport to communicate over.")
             {
                 Argument = new Argument<string>(name: "reversedServerAddress")
+            };
+
+        private static Option ProvideTriggers() =>
+            new Option(
+                aliases: new[] { "-t", "--triggers" },
+                description: "Enable triggers")
+            {
+                Argument = new Argument<bool>(name: "triggers", defaultValue: false)
             };
 
         private static string GetDefaultMetricsEndpoint()

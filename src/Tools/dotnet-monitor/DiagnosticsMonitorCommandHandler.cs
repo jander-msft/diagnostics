@@ -22,15 +22,15 @@ namespace Microsoft.Diagnostics.Tools.Monitor
         private const string ConfigPrefix = "DotnetMonitor_";
         private const string ConfigPath = "/etc/dotnet-monitor";
 
-        public async Task<int> Start(CancellationToken token, IConsole console, string[] urls, string[] metricUrls, bool metrics, string reversedServerAddress)
+        public async Task<int> Start(CancellationToken token, IConsole console, string[] urls, string[] metricUrls, bool metrics, string reversedServerAddress, bool triggers)
         {
             //CONSIDER The console logger uses the standard AddConsole, and therefore disregards IConsole.
-            using IWebHost host = CreateWebHostBuilder(console, urls, metricUrls, metrics, reversedServerAddress).Build();
+            using IWebHost host = CreateWebHostBuilder(console, urls, metricUrls, metrics, reversedServerAddress, triggers).Build();
             await host.RunAsync(token);
             return 0;
         }
 
-        public IWebHostBuilder CreateWebHostBuilder(IConsole console, string[] urls, string[] metricUrls, bool metrics, string reversedServerAddress)
+        public IWebHostBuilder CreateWebHostBuilder(IConsole console, string[] urls, string[] metricUrls, bool metrics, string reversedServerAddress, bool triggers)
         {
             if (metrics)
             {
@@ -41,6 +41,10 @@ namespace Microsoft.Diagnostics.Tools.Monitor
                 .ConfigureAppConfiguration((IConfigurationBuilder builder) =>
                 {
                     ConfigureEndpointInfoSource(builder, reversedServerAddress);
+                    if (triggers)
+                    {
+                        ConfigureTriggers(builder);
+                    }
                     if (metrics)
                     {
                         //Note these are in precedence order.
@@ -53,6 +57,8 @@ namespace Microsoft.Diagnostics.Tools.Monitor
                 {
                     //TODO Many of these service additions should be done through extension methods
                     services.Configure<DiagnosticPortConfiguration>(context.Configuration.GetSection(nameof(DiagnosticPortConfiguration)));
+                    services.Configure<TriggerConfiguration>(context.Configuration.GetSection(nameof(TriggerConfiguration)));
+                    services.AddSingleton<ITriggerService, TriggerService>();
                     services.AddSingleton<IEndpointInfoSource, FilteredEndpointInfoSource>();
                     services.AddHostedService<FilteredEndpointInfoSourceHostedService>();
                     services.AddSingleton<IDiagnosticServices, DiagnosticServices>();
@@ -85,6 +91,14 @@ namespace Microsoft.Diagnostics.Tools.Monitor
             {
                 {MakeKey(nameof(DiagnosticPortConfiguration), nameof(DiagnosticPortConfiguration.ConnectionMode)), connectionMode.ToString()},
                 {MakeKey(nameof(DiagnosticPortConfiguration), nameof(DiagnosticPortConfiguration.EndpointName)), diagnosticPort}
+            });
+        }
+
+        private static void ConfigureTriggers(IConfigurationBuilder builder)
+        {
+            builder.AddInMemoryCollection(new Dictionary<string, string>
+            {
+                {MakeKey(nameof(TriggerConfiguration), nameof(TriggerConfiguration.Enabled)), true.ToString()},
             });
         }
 
