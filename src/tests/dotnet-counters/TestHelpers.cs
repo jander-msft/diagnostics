@@ -5,14 +5,14 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-
-using Microsoft.Diagnostics.Tools.Counters;
+using Microsoft.Diagnostics.Monitoring.EventPipe;
 
 namespace DotnetCounters.UnitTests
 {
     class TestHelpers
     {
         public static ICounterPayload GenerateCounterPayload(
+            string provider,
             bool isIncrementingCounter,
             string counterName,
             double counterValue,
@@ -22,7 +22,7 @@ namespace DotnetCounters.UnitTests
         {
             if (isIncrementingCounter)
             {
-                Dictionary<string, object> payloadFields = new Dictionary<string, object>()
+                IDictionary<string, object> payloadFields = new Dictionary<string, object>()
                 {
                     { "Name", counterName },
                     { "Increment", counterValue },
@@ -30,7 +30,7 @@ namespace DotnetCounters.UnitTests
                     { "DisplayRateTimeScale", displayRateTimeScaleSeconds == 0 ? "" : TimeSpan.FromSeconds(displayRateTimeScaleSeconds).ToString() },
                     { "DisplayUnits", displayUnits },
                 };
-                ICounterPayload payload = new IncrementingCounterPayload(payloadFields, 1);
+                ICounterPayload payload = new IncrementingCounterPayload(provider, payloadFields, 1);
                 return payload;
             }
             else
@@ -42,7 +42,7 @@ namespace DotnetCounters.UnitTests
                     { "DisplayName", displayName },
                     { "DisplayUnits", displayUnits },
                 };
-                ICounterPayload payload = new CounterPayload(payloadFields);
+                ICounterPayload payload = new CounterPayload(provider, payloadFields);
                 return payload;
             }
         }

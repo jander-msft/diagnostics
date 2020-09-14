@@ -11,6 +11,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using Graphs;
+using Microsoft.Diagnostics.Monitoring.EventPipe;
 
 namespace Microsoft.Diagnostics.Tools.GCDump
 {
@@ -115,16 +116,16 @@ namespace Microsoft.Diagnostics.Tools.GCDump
             out MemoryGraph memoryGraph)
         {
             var heapInfo = new DotNetHeapInfo();
-            var log = verbose ? Console.Out : TextWriter.Null; 
-            
+            var log = verbose ? Console.Out : TextWriter.Null;
+
             memoryGraph = new MemoryGraph(50_000);
+
 
             if (!EventPipeDotNetHeapDumper.DumpFromEventPipe(ct, processId, memoryGraph, log, timeout, heapInfo))
             {
                 return false;
             }
 
-            memoryGraph.AllowReading();
             return true;
         }
 

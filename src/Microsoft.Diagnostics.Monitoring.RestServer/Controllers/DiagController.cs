@@ -14,6 +14,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Diagnostics.Monitoring.Contracts;
+using Microsoft.Diagnostics.Monitoring.EventPipe;
 using Microsoft.Diagnostics.Monitoring.RestServer.Models;
 using Microsoft.Diagnostics.Monitoring.RestServer.Validation;
 using Microsoft.Diagnostics.NETCore.Client;
@@ -60,7 +62,7 @@ namespace Microsoft.Diagnostics.Monitoring.RestServer.Controllers
         [HttpGet("dump/{processFilter?}")]
         public Task<ActionResult> GetDump(
             ProcessFilter? processFilter,
-            [FromQuery] DumpType type = DumpType.WithHeap)
+            [FromQuery] Contracts.DumpType type = Contracts.DumpType.WithHeap)
         {
             return this.InvokeService(async () =>
             {
@@ -84,13 +86,39 @@ namespace Microsoft.Diagnostics.Monitoring.RestServer.Controllers
             return this.InvokeService(async () =>
             {
                 IProcessInfo processInfo = await _diagnosticServices.GetProcessAsync(processFilter, HttpContext.RequestAborted);
-                Stream result = await _diagnosticServices.GetGcDump(processInfo, this.HttpContext.RequestAborted);
-                return File(result, "application/octet-stream", FormattableString.Invariant($"{GetFileNameTimeStampUtcNow()}_{processInfo.Pid}.gcdump"));
+
+                var graph = new Graphs.MemoryGraph(50_000);
+
+                EventGCPipelineSettings settings = new EventGCPipelineSettings
+                {
+                    Duration = Timeout.InfiniteTimeSpan,
+                    ProcessId = processInfo.Pid
+                };
+                EventGCPipeline pipeline = new EventGCPipeline(processInfo.Client, settings, graph);
+                
+                try
+                {
+                    await pipeline.RunAsync(HttpContext.RequestAborted);
+                    var dumper = new GCHeapDump(graph);
+                    dumper.CreationTool = "dotnet-monitor";
+
+                    var stream = new MemoryStream();
+                    var serializer = new FastSerialization.Serializer(stream, dumper, leaveOpen: true);
+                    serializer.Close();
+
+                    stream.Position = 0;
+
+                    return File(stream, "application/octet-stream", FormattableString.Invariant($"{GetFileNameTimeStampUtcNow()}_{processInfo.Pid}.gcdump"));
+                }
+                finally
+                {
+                    await pipeline.DisposeAsync();
+                }
             });
         }
 
         [HttpGet("trace/{processFilter?}")]
-        public Task<ActionResult> Trace(
+        public ActionResult Trace(
             ProcessFilter? processFilter,
             [FromQuery]TraceProfile profile = DefaultTraceProfiles,
             [FromQuery][Range(-1, int.MaxValue)] int durationSeconds = 30,
@@ -98,7 +126,7 @@ namespace Microsoft.Diagnostics.Monitoring.RestServer.Controllers
         {
             TimeSpan duration = ConvertSecondsToTimeSpan(durationSeconds);
 
-            return this.InvokeService(async () =>
+            return this.InvokeService(() =>
             {
                 var configurations = new List<MonitoringSourceConfiguration>();
                 if (profile.HasFlag(TraceProfile.Cpu))
@@ -115,24 +143,24 @@ namespace Microsoft.Diagnostics.Monitoring.RestServer.Controllers
                 }
                 if (profile.HasFlag(TraceProfile.Metrics))
                 {
-                    configurations.Add(new MetricSourceConfiguration(metricsIntervalSeconds));
+                    configurations.Add(new MetricSourceConfiguration(metricsIntervalSeconds, Enumerable.Empty<string>()));
                 }
 
                 var aggregateConfiguration = new AggregateSourceConfiguration(configurations.ToArray());
 
-                return await StartTrace(processFilter, aggregateConfiguration, duration);
+                return StartTrace(processFilter, aggregateConfiguration, duration);
             });
         }
 
         [HttpPost("trace/{processFilter?}")]
-        public Task<ActionResult> TraceCustomConfiguration(
+        public ActionResult TraceCustomConfiguration(
             ProcessFilter? processFilter,
             [FromBody][Required] EventPipeConfigurationModel configuration,
             [FromQuery][Range(-1, int.MaxValue)] int durationSeconds = 30)
         {
             TimeSpan duration = ConvertSecondsToTimeSpan(durationSeconds);
 
-            return this.InvokeService(async () =>
+            return this.InvokeService(() =>
             {
                 var providers = new List<EventPipeProvider>();
 
@@ -156,7 +184,7 @@ namespace Microsoft.Diagnostics.Monitoring.RestServer.Controllers
                     requestRundown: configuration.RequestRundown,
                     bufferSizeInMB: configuration.BufferSizeInMB);
 
-                return await StartTrace(processFilter, traceConfiguration, duration);
+                return StartTrace(processFilter, traceConfiguration, duration);
             });
         }
 
@@ -183,19 +211,53 @@ namespace Microsoft.Diagnostics.Monitoring.RestServer.Controllers
 
                 return new OutputStreamResult(async (outputStream, token) =>
                 {
-                    await _diagnosticServices.StartLogs(outputStream, processInfo, duration, format, level, token);
+                    using var loggerFactory = new LoggerFactory();
+
+                    loggerFactory.AddProvider(new StreamingLoggerProvider(outputStream, format, level));
+
+                    var settings = new EventLogsPipelineSettings
+                    {
+                        Duration = duration,
+                        LogLevel = level,
+                        ProcessId = processInfo.Pid
+                    };
+                    await using EventLogsPipeline pipeline = new EventLogsPipeline(processInfo.Client, settings, loggerFactory);
+                    await pipeline.RunAsync(token);
+
                 }, contentType, downloadName);
             });
         }
 
-        private async Task<StreamWithCleanupResult> StartTrace(
+        private ActionResult StartTrace(
             ProcessFilter? processFilter,
             MonitoringSourceConfiguration configuration,
             TimeSpan duration)
         {
-            IProcessInfo processInfo = await _diagnosticServices.GetProcessAsync(processFilter, HttpContext.RequestAborted);
-            IStreamWithCleanup result = await _diagnosticServices.StartTrace(processInfo, configuration, duration, this.HttpContext.RequestAborted);
-            return new StreamWithCleanupResult(result, "application/octet-stream", FormattableString.Invariant($"{GetFileNameTimeStampUtcNow()}_{processInfo.Pid}.nettrace"));
+            return new OutputStreamResult(async (outputStream, token) =>
+            {
+                IProcessInfo processInfo = await _diagnosticServices.GetProcessAsync(processFilter, token);
+
+                Func<Stream, CancellationToken, Task> streamAvailable = async (Stream eventStream, CancellationToken token) =>
+                {
+                    await eventStream.CopyToAsync(outputStream, 0x1000, token);
+                };
+
+                EventTracePipeline pipeProcessor = new EventTracePipeline(processInfo.Client, new EventTracePipelineSettings
+                {
+                    Configuration = configuration,
+                    Duration = duration,
+                    ProcessId = processInfo.Pid
+                }, streamAvailable);
+
+                try
+                {
+                    await pipeProcessor.RunAsync(token);
+                }
+                finally
+                {
+                    await pipeProcessor.DisposeAsync();
+                }
+            }, "application/octet-stream", FormattableString.Invariant($"{GetFileNameTimeStampUtcNow()}_{processFilter.Value.ProcessId}.nettrace"));
         }
 
         private static TimeSpan ConvertSecondsToTimeSpan(int durationSeconds)

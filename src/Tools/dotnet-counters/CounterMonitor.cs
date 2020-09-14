@@ -15,80 +15,16 @@ using System.Threading.Tasks;
 using Microsoft.Diagnostics.Tracing;
 using Microsoft.Diagnostics.Tools.Counters.Exporters;
 using Microsoft.Internal.Common.Utils;
+using Microsoft.Diagnostics.Monitoring;
+using Microsoft.Diagnostics.Monitoring.Contracts;
+using Microsoft.Diagnostics.Monitoring.EventPipe;
 using System.CommandLine.IO;
 
 namespace Microsoft.Diagnostics.Tools.Counters
 {
-    public class CounterMonitor
+    public static class CounterMonitor
     {
-        private int _processId;
-        private int _interval;
-        private List<string> _counterList;
-        private CancellationToken _ct;
-        private IConsole _console;
-        private ICounterRenderer _renderer;
-        private CounterFilter filter;
-        private string _output;
-        private bool pauseCmdSet;
-        private DiagnosticsClient _diagnosticsClient;
-        private EventPipeSession _session;
-
-        public CounterMonitor()
-        {
-            filter = new CounterFilter();
-            pauseCmdSet = false;
-        }
-
-        private void DynamicAllMonitor(TraceEvent obj)
-        {
-            // If we are paused, ignore the event. 
-            // There's a potential race here between the two tasks but not a huge deal if we miss by one event.
-            _renderer.ToggleStatus(pauseCmdSet);
-
-            if (obj.EventName.Equals("EventCounters"))
-            {
-                IDictionary<string, object> payloadVal = (IDictionary<string, object>)(obj.PayloadValue(0));
-                IDictionary<string, object> payloadFields = (IDictionary<string, object>)(payloadVal["Payload"]);
-
-                // If it's not a counter we asked for, ignore it.
-                if (!filter.Filter(obj.ProviderName, payloadFields["Name"].ToString())) return;
-
-                ICounterPayload payload = payloadFields["CounterType"].Equals("Sum") ? (ICounterPayload)new IncrementingCounterPayload(payloadFields, _interval) : (ICounterPayload)new CounterPayload(payloadFields);
-                _renderer.CounterPayloadReceived(obj.ProviderName, payload, pauseCmdSet);
-            }
-        }
-
-        private void StopMonitor()
-        {
-            try
-            {
-                _session?.Stop();
-            }
-            catch (EndOfStreamException ex)
-            {
-                // If the app we're monitoring exits abruptly, this may throw in which case we just swallow the exception and exit gracefully.
-                Debug.WriteLine($"[ERROR] {ex.ToString()}");
-            }
-            // We may time out if the process ended before we sent StopTracing command. We can just exit in that case.
-            catch (TimeoutException)
-            {
-            }
-            // On Unix platforms, we may actually get a PNSE since the pipe is gone with the process, and Runtime Client Library
-            // does not know how to distinguish a situation where there is no pipe to begin with, or where the process has exited
-            // before dotnet-counters and got rid of a pipe that once existed.
-            // Since we are catching this in StopMonitor() we know that the pipe once existed (otherwise the exception would've 
-            // been thrown in StartMonitor directly)
-            catch (PlatformNotSupportedException)
-            {
-            }
-            // On non-abrupt exits, the socket may be already closed by the runtime and we won't be able to send a stop request through it. 
-            catch (ServerNotAvailableException)
-            {
-            }
-            _renderer.Stop();
-        }
-
-        public async Task<int> Monitor(CancellationToken ct, List<string> counter_list, IConsole console, int processId, int refreshInterval, string name)
+        public static async Task<int> Monitor(CancellationToken ct, List<string> counter_list, IConsole console, int processId, int refreshInterval, string name)
         {
             if (name != null)
             {
@@ -104,33 +40,14 @@ namespace Microsoft.Diagnostics.Tools.Counters
                 }
             }
 
-            try
+            return await HandleExceptions(console, async () =>
             {
-                _ct = ct;
-                _counterList = counter_list; // NOTE: This variable name has an underscore because that's the "name" that the CLI displays. System.CommandLine doesn't like it if we change the variable to camelcase. 
-                _console = console;
-                _processId = processId;
-                _interval = refreshInterval;
-                _renderer = new ConsoleWriter();
-                _diagnosticsClient = new DiagnosticsClient(processId);
-
-                return await Start();
-            }
-
-            catch (OperationCanceledException)
-            {
-                try
-                {
-                    _session.Stop();
-                }
-                catch (Exception) {} // Swallow all exceptions for now.
-                
-                console.Out.WriteLine($"Complete");
-                return 1;
-            }
+                EventPipeCounterPipelineSettings settings = BuildSettings(processId, counter_list, refreshInterval, console);
+                await RunUILoop(settings, allowPause: true, new ConsoleWriter(), ct);
+            });
         }
 
-        public async Task<int> Collect(CancellationToken ct, List<string> counter_list, IConsole console, int processId, int refreshInterval, CountersExportFormat format, string output, string name)
+        public static async Task<int> Collect(CancellationToken ct, List<string> counter_list, IConsole console, int processId, int refreshInterval, CountersExportFormat format, string output, string name)
         {
             if (name != null)
             {
@@ -146,25 +63,21 @@ namespace Microsoft.Diagnostics.Tools.Counters
                 }
             }
 
-            try
+            return await HandleExceptions(console, async () =>
             {
-                _ct = ct;
-                _counterList = counter_list; // NOTE: This variable name has an underscore because that's the "name" that the CLI displays. System.CommandLine doesn't like it if we change the variable to camelcase. 
-                _console = console;
-                _processId = processId;
-                _interval = refreshInterval;
-                _output = output;
-                _diagnosticsClient = new DiagnosticsClient(processId);
+                EventPipeCounterPipelineSettings settings = BuildSettings(processId, counter_list, refreshInterval, console);
 
-                if (_output.Length == 0)
+                if (output.Length == 0)
                 {
-                    _console.Error.WriteLine("Output cannot be an empty string");
-                    return 0;
+                    throw new CommandLineError("Output cannot be an empty string");
                 }
 
+                string extension = null;
+                Func<Stream, IMetricsLogger> exporterFactory = null;
                 if (format == CountersExportFormat.csv)
                 {
-                    _renderer = new CSVExporter(output);
+                    extension = ".csv";
+                    exporterFactory = s => new CounterCsvStreamExporter(s);
                 }
                 else if (format == CountersExportFormat.json)
                 {
@@ -172,157 +85,176 @@ namespace Microsoft.Diagnostics.Tools.Counters
                     string processName = "";
                     try
                     {
-                        processName = Process.GetProcessById(_processId).ProcessName;
+                        processName = Process.GetProcessById(processId).ProcessName;
                     }
                     catch (Exception) { }
-                    _renderer = new JSONExporter(output, processName); ;
+
+                    extension = ".json";
+                    exporterFactory = s => new CounterJsonStreamExporter(s, processName);
                 }
                 else
                 {
-                    _console.Error.WriteLine($"The output format {format} is not a valid output format.");
-                    return 0;
+                    throw new CommandLineError($"The output format {format} is not a valid output format.");
                 }
-                return await Start();
-            }
-            catch (OperationCanceledException)
-            {
-            }
 
+                string filePath = output.EndsWith(extension) ? output : output + extension;
+                if (File.Exists(filePath))
+                {
+                    Console.WriteLine($"[Warning] {filePath} already exists. This file will be overwritten.");
+                }
+                using(Stream outputStream = File.Create(filePath))
+                {
+                    IMetricsLogger logger = exporterFactory(outputStream);
+
+                    Console.WriteLine("Starting a counter session. Press Q to quit.");
+                    await RunUILoop(settings, allowPause: false, logger, ct);
+                    Console.WriteLine("File saved to " + filePath);
+                }
+            });
+        }
+
+        private static async Task<int> HandleExceptions(IConsole console, Func<Task> work)
+        {
+            try
+            {
+                await work();
+            }
+            catch (PipelineAbortedException)
+            {
+                // This can happen when the runtime doesn't respond promptly to a request to stop sending events.
+                // We don't treat it as failure worth notifying users about
+            }
+            catch (CommandLineError e)
+            {
+                console.Error.WriteLine(e.Message);
+                return 0;
+            }
+            catch (PipelineException e)
+            {
+                console.Error.WriteLine(e.Message);
+                return 0;
+            }
             return 1;
         }
 
-        private string BuildProviderString()
+        private static EventPipeCounterPipelineSettings BuildSettings(int processId, List<string> counterList, int refreshInterval, IConsole console)
         {
-            string providerString;
-            if (_counterList.Count == 0)
+            EventPipeCounterPipelineSettings settings = new EventPipeCounterPipelineSettings();
+            if (processId == 0)
             {
-                CounterProvider defaultProvider = null;
-                _console.Out.WriteLine($"counter_list is unspecified. Monitoring all counters by default.");
+                throw new CommandLineError("--process-id is required.");
+            }
+            settings.ProcessId = processId;
+            settings.Duration = Timeout.InfiniteTimeSpan;
+            settings.CounterGroups = BuildCounterGroups(counterList, console);
+            settings.RefreshInterval = TimeSpan.FromSeconds(refreshInterval);
+            return settings;
+        }
 
-                // Enable the default profile if nothing is specified
-                if (!KnownData.TryGetProvider("System.Runtime", out defaultProvider))
-                {
-                    _console.Error.WriteLine("No providers or profiles were specified and there is no default profile available.");
-                    return "";
-                }
-                providerString = defaultProvider.ToProviderString(_interval);
-                filter.AddFilter("System.Runtime");
+        private static EventPipeCounterGroup[] BuildCounterGroups(List<string> counterList, IConsole console)
+        {
+            List<EventPipeCounterGroup> groups = new List<EventPipeCounterGroup>();
+            if (counterList.Count == 0)
+            {
+                console.Out.WriteLine($"counter_list is unspecified. Monitoring all counters by default.");
+                groups.Add(new EventPipeCounterGroup() { ProviderName = "System.Runtime" });
             }
             else
             {
-                CounterProvider provider = null;
-                StringBuilder sb = new StringBuilder("");
-                for (var i = 0; i < _counterList.Count; i++)
+                for (var i = 0; i < counterList.Count; i++)
                 {
-                    string counterSpecifier = _counterList[i];
+                    string counterSpecifier = counterList[i];
                     string[] tokens = counterSpecifier.Split('[');
                     string providerName = tokens[0];
-                    if (!KnownData.TryGetProvider(providerName, out provider))
-                    {
-                        sb.Append(CounterProvider.SerializeUnknownProviderName(providerName, _interval));
-                    }
-                    else
-                    {
-                        sb.Append(provider.ToProviderString(_interval));    
-                    }
-                    
-                    if (i != _counterList.Count - 1)
-                    {
-                        sb.Append(",");
-                    }
 
                     if (tokens.Length == 1)
                     {
-                        filter.AddFilter(providerName); // This means no counter filter was specified.
+                        groups.Add(new EventPipeCounterGroup() { ProviderName = providerName });
                     }
                     else
                     {
                         string counterNames = tokens[1];
                         string[] enabledCounters = counterNames.Substring(0, counterNames.Length-1).Split(',');
-                        
-                        filter.AddFilter(providerName, enabledCounters);
+                        groups.Add(new EventPipeCounterGroup() { ProviderName = providerName, CounterNames = enabledCounters });
                     }
                 }
-                providerString = sb.ToString();
             }
-            return providerString;
+            return groups.ToArray();
         }
         
 
-        private async Task<int> Start()
+        private static async Task RunUILoop(EventPipeCounterPipelineSettings settings, bool allowPause, IMetricsLogger output, CancellationToken ct)
         {
-            if (_processId == 0)
+            EventCounterPipeline pipeline = new EventCounterPipeline(new DiagnosticsClient(settings.ProcessId), settings, new IMetricsLogger[] { output });
+            bool startPipeline = true;
+            while(true)
             {
-                _console.Error.WriteLine("--process-id is required.");
-                return 1;
-            }
-
-            string providerString = BuildProviderString();
-            if (providerString.Length == 0)
-            {
-                return 1;
-            }
-
-            _renderer.Initialize();
-
-            ManualResetEvent shouldExit = new ManualResetEvent(false);
-            _ct.Register(() => shouldExit.Set());
-            Task monitorTask = new Task(() => {
-                try
+                Task<ConsoleKey> keyTask = PollForNextKeypress(ct);
+                List<Task> tasks = new List<Task>();
+                tasks.Add(keyTask);
+                
+                if ((pipeline != null) && (startPipeline))
                 {
-                    _session = _diagnosticsClient.StartEventPipeSession(Trace.Extensions.ToProviders(providerString), false, 10);
-                    var source = new EventPipeEventSource(_session.EventStream);
-                    source.Dynamic.All += DynamicAllMonitor;
-                    _renderer.EventPipeSourceConnected();
-                    source.Process();
+                    tasks.Add(pipeline.RunAsync(CancellationToken.None));
+                    startPipeline = false;
                 }
-                catch (DiagnosticsClientException ex)
+                Task completedTask = await Task.WhenAny(tasks);
+                if(completedTask == keyTask)
                 {
-                    Console.WriteLine($"Failed to start the counter session: {ex.ToString()}");
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"[ERROR] {ex.ToString()}");
-                }
-                finally
-                {
-                    shouldExit.Set();
-                }
-            });
-
-            monitorTask.Start();
-
-            while(!shouldExit.WaitOne(250))
-            {
-                while (true)
-                {
-                    if (shouldExit.WaitOne(250))
+                    try
                     {
-                        StopMonitor();
-                        return 0;
+                        ConsoleKey key = await keyTask;
+                        if (key == ConsoleKey.Q)
+                        {
+                            break;
+                        }
+                        else if(key == ConsoleKey.P && allowPause && pipeline != null)
+                        {
+                            //await pipeline.StopAsync(TimeSpan.FromSeconds(1));
+                            await pipeline.DisposeAsync();
+                            pipeline = null;
+                        }
+                        else if(key == ConsoleKey.R && pipeline == null)
+                        {
+                            pipeline = new EventCounterPipeline(new DiagnosticsClient(settings.ProcessId), settings, new IMetricsLogger[] { output });
+                            startPipeline = true;
+                        }
                     }
-                    if (Console.KeyAvailable)
+                    catch(TaskCanceledException)
                     {
-                        break;
+                        break; // ctrl-c
                     }
                 }
-                ConsoleKey cmd = Console.ReadKey(true).Key;
-                if (cmd == ConsoleKey.Q)
+                else
                 {
-                    StopMonitor();
-                    break;
-                }
-                else if (cmd == ConsoleKey.P)
-                {
-                    pauseCmdSet = true;
-                }
-                else if (cmd == ConsoleKey.R)
-                {
-                    pauseCmdSet = false;
+                    break; // pipeline stopped on its own which implies an error happened
+                           // the exception will be thrown in pipeline.StopAsync below
                 }
             }
 
-            return await Task.FromResult(0);
+            if (pipeline != null)
+            {
+                //await pipeline.StopAsync(TimeSpan.FromSeconds(1));
+                await pipeline.DisposeAsync();
+            }
         }
+
+        private static async Task<ConsoleKey> PollForNextKeypress(CancellationToken token)
+        {
+            while(!token.IsCancellationRequested)
+            {
+                await Task.Delay(250, token);
+                if(Console.KeyAvailable)
+                {
+                    return Console.ReadKey(true).Key;
+                }
+            }
+            throw new TaskCanceledException();
+        }
+    }
+
+    class CommandLineError : Exception 
+    {
+        public CommandLineError(string message) : base(message) { }
     }
 }

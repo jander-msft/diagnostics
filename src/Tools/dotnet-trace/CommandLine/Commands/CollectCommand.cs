@@ -2,6 +2,9 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 // See the LICENSE file in the project root for more information.
 
+using Microsoft.Diagnostics.Monitoring;
+using Microsoft.Diagnostics.Monitoring.Contracts;
+using Microsoft.Diagnostics.Monitoring.EventPipe;
 using Microsoft.Diagnostics.NETCore.Client;
 using Microsoft.Internal.Common.Utils;
 using Microsoft.Tools.Common;
@@ -127,6 +130,10 @@ namespace Microsoft.Diagnostics.Tools.Trace
                 var process = Process.GetProcessById(processId);
                 var shouldExit = new ManualResetEvent(false);
                 var shouldStopAfterDuration = duration != default(TimeSpan);
+                if (!shouldStopAfterDuration)
+                {
+                    duration = Timeout.InfiniteTimeSpan;
+                }
                 var rundownRequested = false;
                 System.Timers.Timer durationTimer = null;
 
@@ -135,37 +142,36 @@ namespace Microsoft.Diagnostics.Tools.Trace
                 var diagnosticsClient = new DiagnosticsClient(processId);
                 using (VirtualTerminalMode vTermMode = VirtualTerminalMode.TryEnable())
                 {
-                    EventPipeSession session = null;
-                    try
-                    {
-                        session = diagnosticsClient.StartEventPipeSession(providerCollection, true, (int)buffersize);
-                    }
-                    catch (DiagnosticsClientException e)
-                    {
-                        Console.Error.WriteLine($"Unable to start a tracing session: {e.ToString()}");
-                    }
-
-                    if (session == null)
-                    {
-                        Console.Error.WriteLine("Unable to create session.");
-                        return ErrorCodes.SessionCreationError;
-                    }
-
-                    if (shouldStopAfterDuration)
-                    {
-                        durationTimer = new System.Timers.Timer(duration.TotalMilliseconds);
-                        durationTimer.Elapsed += (s, e) => shouldExit.Set();
-                        durationTimer.AutoReset = false;
-                    }
-
                     var stopwatch = new Stopwatch();
-                    durationTimer?.Start();
-                    stopwatch.Start();
-
                     LineRewriter rewriter = null;
 
                     using (var fs = new FileStream(output.FullName, FileMode.Create, FileAccess.Write))
                     {
+                        var settings = new EventTracePipelineSettings
+                        {
+                            Configuration = new EventPipeProviderSourceConfiguration(requestRundown: true, bufferSizeInMB: (int)buffersize, providers: providerCollection.ToArray()),
+                            Duration = duration,
+                            ProcessId = processId
+                        };
+
+                        Func<Stream, CancellationToken, Task> streamAvailable = (Stream eventStream, CancellationToken token) =>
+                        {
+                            return eventStream.CopyToAsync(fs, token).ContinueWith((task) => shouldExit.Set());
+                        };
+
+                        EventTracePipeline pipeline = new EventTracePipeline(diagnosticsClient, settings, streamAvailable);
+                        Task processingTask = null;
+                        try
+                        {
+                            stopwatch.Start();
+                            processingTask = pipeline.RunAsync(ct);
+                        }
+                        catch (PipelineException e)
+                        {
+                            Console.Error.WriteLine($"Unable to start a tracing session: {e.ToString()}");
+                            return ErrorCodes.SessionCreationError;
+                        }
+
                         Console.Out.WriteLine($"Process        : {process.MainModule.FileName}");
                         Console.Out.WriteLine($"Output File    : {fs.Name}");
                         if (shouldStopAfterDuration)
@@ -173,7 +179,6 @@ namespace Microsoft.Diagnostics.Tools.Trace
                         Console.Out.WriteLine("\n\n");
 
                         var fileInfo = new FileInfo(output.FullName);
-                        Task copyTask = session.EventStream.CopyToAsync(fs).ContinueWith((task) => shouldExit.Set());
 
                         if (!Console.IsOutputRedirected)
                         {
@@ -199,7 +204,7 @@ namespace Microsoft.Diagnostics.Tools.Trace
                             printStatus();
 
                         // if the CopyToAsync ended early (target program exited, etc.), the we don't need to stop the session.
-                        if (!copyTask.Wait(0))
+                        if (!processingTask.Wait(0))
                         {
                             // Behavior concerning Enter moving text in the terminal buffer when at the bottom of the buffer
                             // is different between Console/Terminals on Windows and Mac/Linux
@@ -212,12 +217,12 @@ namespace Microsoft.Diagnostics.Tools.Trace
                             }
                             durationTimer?.Stop();
                             rundownRequested = true;
-                            session.Stop();
+                            await pipeline.StopAsync(Timeout.InfiniteTimeSpan);
 
                             do
                             {
                                 printStatus();
-                            } while (!copyTask.Wait(100));
+                            } while (!processingTask.Wait(100));
                         }
                     }
 

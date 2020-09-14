@@ -10,10 +10,8 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
-using FastSerialization;
-using Graphs;
+using Microsoft.Diagnostics.Monitoring.Contracts;
 using Microsoft.Diagnostics.NETCore.Client;
-using Microsoft.Extensions.Logging;
 
 namespace Microsoft.Diagnostics.Monitoring
 {
@@ -48,7 +46,7 @@ namespace Microsoft.Diagnostics.Monitoring
             }
         }
 
-        public async Task<Stream> GetDump(IProcessInfo pi, DumpType mode, CancellationToken token)
+        public async Task<Stream> GetDump(IProcessInfo pi, Contracts.DumpType mode, CancellationToken token)
         {
             string dumpFilePath = Path.Combine(Path.GetTempPath(), FormattableString.Invariant($"{Guid.NewGuid()}_{pi.Pid}"));
             NETCore.Client.DumpType dumpType = MapDumpType(mode);
@@ -70,58 +68,17 @@ namespace Microsoft.Diagnostics.Monitoring
             return new AutoDeleteFileStream(dumpFilePath);
         }
 
-        public async Task<Stream> GetGcDump(IProcessInfo pi, CancellationToken token)
-        {
-            var graph = new MemoryGraph(50_000);
-            await using var processor = new DiagnosticsEventPipeProcessor(
-                PipeMode.GCDump,
-                gcGraph: graph);
-
-            await processor.Process(pi.Client, pi.Pid, Timeout.InfiniteTimeSpan, token);
-
-            var dumper = new GCHeapDump(graph);
-            dumper.CreationTool = "dotnet-monitor";
-
-            var stream = new MemoryStream();
-            var serializer = new Serializer(stream, dumper, leaveOpen: true);
-            serializer.Close();
-
-            stream.Position = 0;
-            return stream;
-        }
-
-        public async Task<IStreamWithCleanup> StartTrace(IProcessInfo pi, MonitoringSourceConfiguration configuration, TimeSpan duration, CancellationToken token)
-        {
-            DiagnosticsMonitor monitor = new DiagnosticsMonitor(configuration);
-            Stream stream = await monitor.ProcessEvents(pi.Client, duration, token);
-            return new StreamWithCleanup(monitor, stream);
-        }
-
-        public async Task StartLogs(Stream outputStream, IProcessInfo pi, TimeSpan duration, LogFormat format, LogLevel level, CancellationToken token)
-        {
-            using var loggerFactory = new LoggerFactory();
-
-            loggerFactory.AddProvider(new StreamingLoggerProvider(outputStream, format, level));
-
-            await using var processor = new DiagnosticsEventPipeProcessor(
-                PipeMode.Logs,
-                loggerFactory: loggerFactory,
-                logsLevel: level);
-
-            await processor.Process(pi.Client, pi.Pid, duration, token);
-        }
-
-        private static NETCore.Client.DumpType MapDumpType(DumpType dumpType)
+        private static NETCore.Client.DumpType MapDumpType(Contracts.DumpType dumpType)
         {
             switch (dumpType)
             {
-                case DumpType.Full:
+                case Contracts.DumpType.Full:
                     return NETCore.Client.DumpType.Full;
-                case DumpType.WithHeap:
+                case Contracts.DumpType.WithHeap:
                     return NETCore.Client.DumpType.WithHeap;
-                case DumpType.Triage:
+                case Contracts.DumpType.Triage:
                     return NETCore.Client.DumpType.Triage;
-                case DumpType.Mini:
+                case Contracts.DumpType.Mini:
                     return NETCore.Client.DumpType.Normal;
                 default:
                     throw new ArgumentException("Unexpected dumpType", nameof(dumpType));
@@ -221,35 +178,6 @@ namespace Microsoft.Diagnostics.Monitoring
             public override bool CanSeek => false;
         }
 
-        /// <summary>
-        /// This helper class allows us to return a stream result to the caller and then later dispose
-        /// any underlying data structures associated with the DiagnosticsMonitor once the caller is done
-        /// processing the stream.
-        /// </summary>
-        private sealed class StreamWithCleanup : IStreamWithCleanup
-        {
-            private readonly DiagnosticsMonitor _monitor;
-
-            public StreamWithCleanup(DiagnosticsMonitor monitor, Stream stream)
-            {
-                Stream = stream;
-                _monitor = monitor;
-            }
-
-            public Stream Stream { get; }
-
-            public async ValueTask DisposeAsync()
-            {
-                try
-                {
-                    await _monitor.CurrentProcessingTask;
-                }
-                finally
-                {
-                    await _monitor.DisposeAsync();
-                }
-            }
-        }
 
         private sealed class ProcessInfo : IProcessInfo
         {
