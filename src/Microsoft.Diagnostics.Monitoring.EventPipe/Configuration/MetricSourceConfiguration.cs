@@ -15,35 +15,37 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
 {
     public sealed class MetricSourceConfiguration : MonitoringSourceConfiguration
     {
-        private readonly IEnumerable<string> _customProviderNames;
+        private readonly IList<EventPipeProvider> _eventPipeProviders;
 
         public MetricSourceConfiguration(int metricIntervalSeconds, IEnumerable<string> customProviderNames)
         {
-            MetricIntervalSeconds = metricIntervalSeconds.ToString(CultureInfo.InvariantCulture);
-            _customProviderNames = customProviderNames;
-        }
-
-        private string MetricIntervalSeconds { get; }
-
-        public override IList<EventPipeProvider> GetProviders()
-        {
-            IEnumerable<string> providers = null;
-            if (_customProviderNames.Any())
+            if (customProviderNames == null)
             {
-                providers = _customProviderNames;
+                throw new ArgumentNullException(nameof(customProviderNames));
+            }
+            MetricIntervalSeconds = metricIntervalSeconds.ToString(CultureInfo.InvariantCulture);
+
+            IEnumerable<string> providers = null;
+            if (customProviderNames.Any())
+            {
+                providers = customProviderNames;
             }
             else
             {
                 providers = new[] { SystemRuntimeEventSourceName, MicrosoftAspNetCoreHostingEventSourceName, GrpcAspNetCoreServer };
             }
 
-            return providers.Select((string provider) => new EventPipeProvider(provider,
+            _eventPipeProviders = providers.Select((string provider) => new EventPipeProvider(provider,
                EventLevel.Informational,
                (long)ClrTraceEventParser.Keywords.None,
                    new Dictionary<string, string>() {
-                        { "EventCounterIntervalSec", MetricIntervalSeconds } 
+                        { "EventCounterIntervalSec", MetricIntervalSeconds }
                    }
                )).ToList();
         }
+
+        private string MetricIntervalSeconds { get; }
+
+        public override IList<EventPipeProvider> GetProviders() => _eventPipeProviders;
     }
 }
