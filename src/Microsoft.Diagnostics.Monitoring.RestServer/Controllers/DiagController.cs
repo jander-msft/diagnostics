@@ -62,7 +62,7 @@ namespace Microsoft.Diagnostics.Monitoring.RestServer.Controllers
         [HttpGet("dump/{processFilter?}")]
         public Task<ActionResult> GetDump(
             ProcessFilter? processFilter,
-            [FromQuery] Contracts.DumpType type = Contracts.DumpType.WithHeap)
+            [FromQuery] DumpType type = DumpType.WithHeap)
         {
             return this.InvokeService(async () =>
             {

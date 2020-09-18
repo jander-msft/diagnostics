@@ -13,7 +13,7 @@ using System.Threading.Tasks;
 using Microsoft.Diagnostics.Monitoring.Contracts;
 using Microsoft.Diagnostics.NETCore.Client;
 
-namespace Microsoft.Diagnostics.Monitoring
+namespace Microsoft.Diagnostics.Monitoring.RestServer
 {
     public sealed class DiagnosticServices : IDiagnosticServices
     {
@@ -46,7 +46,7 @@ namespace Microsoft.Diagnostics.Monitoring
             }
         }
 
-        public async Task<Stream> GetDump(IProcessInfo pi, Contracts.DumpType mode, CancellationToken token)
+        public async Task<Stream> GetDump(IProcessInfo pi, DumpType mode, CancellationToken token)
         {
             string dumpFilePath = Path.Combine(Path.GetTempPath(), FormattableString.Invariant($"{Guid.NewGuid()}_{pi.Pid}"));
             NETCore.Client.DumpType dumpType = MapDumpType(mode);
@@ -68,17 +68,17 @@ namespace Microsoft.Diagnostics.Monitoring
             return new AutoDeleteFileStream(dumpFilePath);
         }
 
-        private static NETCore.Client.DumpType MapDumpType(Contracts.DumpType dumpType)
+        private static NETCore.Client.DumpType MapDumpType(DumpType dumpType)
         {
             switch (dumpType)
             {
-                case Contracts.DumpType.Full:
+                case DumpType.Full:
                     return NETCore.Client.DumpType.Full;
-                case Contracts.DumpType.WithHeap:
+                case DumpType.WithHeap:
                     return NETCore.Client.DumpType.WithHeap;
-                case Contracts.DumpType.Triage:
+                case DumpType.Triage:
                     return NETCore.Client.DumpType.Triage;
-                case Contracts.DumpType.Mini:
+                case DumpType.Mini:
                     return NETCore.Client.DumpType.Normal;
                 default:
                     throw new ArgumentException("Unexpected dumpType", nameof(dumpType));
