@@ -45,7 +45,6 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.UnitTests
                 var settings = new EventTracePipelineSettings()
                 {
                     Duration = Timeout.InfiniteTimeSpan,
-                    ProcessId = testExecution.TestRunner.Pid,
                     Configuration = new CpuProfileConfiguration()
                 };
 

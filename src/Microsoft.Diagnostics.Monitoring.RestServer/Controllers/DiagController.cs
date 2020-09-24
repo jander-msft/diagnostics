@@ -237,7 +237,7 @@ namespace Microsoft.Diagnostics.Monitoring.RestServer.Controllers
 
             return new OutputStreamResult(async (outputStream, token) =>
             {
-                Func<Stream, CancellationToken, Task> streamAvailable = async (Stream eventStream, CancellationToken token) =>
+                EventTracePipeline.StreamAvailableCallback streamAvailable = async (Stream eventStream, CancellationToken token) =>
                 {
                     await eventStream.CopyToAsync(outputStream, 0x1000, token);
                 };
@@ -246,7 +246,6 @@ namespace Microsoft.Diagnostics.Monitoring.RestServer.Controllers
                 {
                     Configuration = configuration,
                     Duration = duration,
-                    ProcessId = processInfo.Pid
                 }, streamAvailable);
 
                 await pipeProcessor.RunAsync(token);

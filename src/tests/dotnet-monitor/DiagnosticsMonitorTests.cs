@@ -44,14 +44,15 @@ namespace DotnetMonitor.UnitTests
             {
                 //TestRunner should account for start delay to make sure that the diagnostic pipe is available.
 
-                var loggerFactory = new LoggerFactory(new[] { new StreamingLoggerProvider(outputStream, LogFormat.Json) });
-
-                DiagnosticsEventPipeProcessor diagnosticsEventPipeProcessor = new DiagnosticsEventPipeProcessor(
-                    PipeMode.Logs,
-                    loggerFactory);
+                using var loggerFactory = new LoggerFactory(new[] { new StreamingLoggerProvider(outputStream, LogFormat.Json) });
 
                 var client = new DiagnosticsClient(testExecution.TestRunner.Pid);
-                var processingTask = diagnosticsEventPipeProcessor.Process(client, testExecution.TestRunner.Pid, TimeSpan.FromSeconds(10), CancellationToken.None);
+                await using var pipeline = new EventLogsPipeline(
+                    client,
+                    new EventLogsPipelineSettings() { Duration = TimeSpan.FromSeconds(10) },
+                    loggerFactory);
+
+                var processingTask = pipeline.RunAsync(CancellationToken.None);
 
                 //Add a small delay to make sure diagnostic processor had a chance to initialize
                 await Task.Delay(1000);
@@ -60,8 +61,8 @@ namespace DotnetMonitor.UnitTests
                 testExecution.Start();
 
                 await processingTask;
-                await diagnosticsEventPipeProcessor.DisposeAsync();
-                loggerFactory.Dispose();
+
+                await pipeline.StopAsync();
             }
 
             outputStream.Position = 0L;

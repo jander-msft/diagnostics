@@ -150,11 +150,10 @@ namespace Microsoft.Diagnostics.Tools.Trace
                         var settings = new EventTracePipelineSettings
                         {
                             Configuration = new EventPipeProviderSourceConfiguration(requestRundown: true, bufferSizeInMB: (int)buffersize, providers: providerCollection.ToArray()),
-                            Duration = duration,
-                            ProcessId = processId
+                            Duration = duration
                         };
 
-                        Func<Stream, CancellationToken, Task> streamAvailable = (Stream eventStream, CancellationToken token) =>
+                        EventTracePipeline.StreamAvailableCallback streamAvailable = (Stream eventStream, CancellationToken token) =>
                         {
                             return eventStream.CopyToAsync(fs, token).ContinueWith((task) => shouldExit.Set());
                         };

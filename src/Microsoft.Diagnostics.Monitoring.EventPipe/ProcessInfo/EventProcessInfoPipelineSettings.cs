@@ -4,12 +4,7 @@
 
 namespace Microsoft.Diagnostics.Monitoring.EventPipe
 {
-    public enum PipeMode
+    public class EventProcessInfoPipelineSettings : EventSourcePipelineSettings
     {
-        Logs = 1,
-        Metrics,
-        GCDump,
-        ProcessInfo,
-        Nettrace,
     }
 }

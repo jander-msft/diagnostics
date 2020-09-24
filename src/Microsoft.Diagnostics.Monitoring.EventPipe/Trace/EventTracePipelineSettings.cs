@@ -3,13 +3,13 @@
 // See the LICENSE file in the project root for more information.
 
 using System;
-using System.Collections.Generic;
-using System.Text;
 
 namespace Microsoft.Diagnostics.Monitoring.EventPipe
 {
-    public class EventTracePipelineSettings : EventSourcePipelineSettings
+    public class EventTracePipelineSettings
     {
         public MonitoringSourceConfiguration Configuration { get; set; }
+
+        public TimeSpan Duration { get; set; }
     }
 }

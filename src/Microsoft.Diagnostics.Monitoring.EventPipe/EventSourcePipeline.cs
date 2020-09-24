@@ -2,16 +2,12 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 // See the LICENSE file in the project root for more information.
 
-using Graphs;
-using Microsoft.Diagnostics.Monitoring.Contracts;
-using Microsoft.Diagnostics.NETCore.Client;
-using Microsoft.Extensions.Logging;
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Diagnostics.Monitoring.Contracts;
+using Microsoft.Diagnostics.NETCore.Client;
+using Microsoft.Diagnostics.Tracing;
 
 namespace Microsoft.Diagnostics.Monitoring.EventPipe
 {
@@ -28,11 +24,11 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
             _processor = new Lazy<DiagnosticsEventPipeProcessor>(CreateProcessor);
         }
 
-        internal abstract DiagnosticsEventPipeProcessor CreateProcessor();
+        protected abstract MonitoringSourceConfiguration CreateConfiguration();
 
         protected override Task OnRun(CancellationToken token)
         {
-            return _processor.Value.Process(Client, Settings.ProcessId, Settings.Duration, token);
+            return _processor.Value.Process(Client, Settings.Duration, token);
         }
 
         protected override ValueTask OnDispose()
@@ -42,7 +38,6 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
                 return _processor.Value.DisposeAsync();
             }
             return default;
-            
         }
 
         protected override Task OnStop(CancellationToken token)
@@ -57,6 +52,13 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
                 return Task.WhenAny(stoppingTask, src.Task).Unwrap();
             }
             return Task.CompletedTask;
+        }
+
+        protected abstract Task OnEventSourceAvailable(EventPipeEventSource source, Func<Task> stopSessionAsync, CancellationToken token);
+
+        private DiagnosticsEventPipeProcessor CreateProcessor()
+        {
+            return new DiagnosticsEventPipeProcessor(CreateConfiguration(), OnEventSourceAvailable);
         }
     }
 }
