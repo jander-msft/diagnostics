@@ -213,8 +213,8 @@ jobs:
       # Publish test results to Azure Pipelines
       - task: PublishTestResults@2
         inputs:
-          testResultsFormat: xUnit
-          testResultsFiles: '**/*UnitTests*.xml' 
+          testResultsFormat: VSTest
+          testResultsFiles: '**/*UnitTests*.trx' 
           searchFolder: '$(Build.SourcesDirectory)/artifacts/TestResults'
           failTaskOnFailedTests: true
           testRunTitle: 'Tests $(_PhaseName) $(_BuildArch) $(_BuildConfig)'
