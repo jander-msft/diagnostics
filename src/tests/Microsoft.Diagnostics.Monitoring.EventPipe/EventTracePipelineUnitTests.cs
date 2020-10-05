@@ -35,6 +35,7 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.UnitTests
             {
                 throw new SkipTestException("Unstable test on OSX");
             }
+            using var buffer = new MemoryStream();
 
             await using (var testExecution = StartTraceeProcess("TraceStopTest"))
             {
@@ -49,12 +50,12 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.UnitTests
                     Configuration = new CpuProfileConfiguration()
                 };
 
-                var buffer = new MemoryStream();
-
-                var pipeline = new EventTracePipeline(client, settings, async (s, token) => {
+                await using var pipeline = new EventTracePipeline(client, settings, async (s, token) =>
+                {
                     //The buffer must be read in order to not hang. The Stop message will not be processed otherwise.
                     await s.CopyToAsync(buffer);
                 });
+
                 Task pipelineTask = pipeline.RunAsync(CancellationToken.None);
 
                 //Add a small delay to make sure diagnostic processor had a chance to initialize
@@ -62,19 +63,12 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.UnitTests
                 //Send signal to proceed with event collection
                 testExecution.Start();
 
-                try
-                {
-                    //Get cpu for a few seconds and then stop
-                    await Task.Delay(TimeSpan.FromSeconds(5));
-                    await pipeline.StopAsync();
-                }
-                finally
-                {
-                    await pipeline.DisposeAsync();
-                }
-
-                Assert.True(buffer.Length > 0);
+                //Get cpu for a few seconds and then stop
+                await Task.Delay(TimeSpan.FromSeconds(5));
+                await pipeline.StopAsync();
             }
+
+            Assert.True(buffer.Length > 0);
         }
 
         private RemoteTestExecution StartTraceeProcess(string loggerCategory)

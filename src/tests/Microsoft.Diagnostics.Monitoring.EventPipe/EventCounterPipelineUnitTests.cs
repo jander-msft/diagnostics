@@ -28,7 +28,7 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.UnitTests
             _output = output;
         }
 
-        private sealed class TestMetricsLogger : IMetricsLogger
+        private sealed class TestMetricsLogger : ICountersLogger
         {
             private readonly ITestOutputHelper _output;
             private Dictionary<string, ICounterPayload> _metrics = new Dictionary<string, ICounterPayload>();
@@ -44,9 +44,9 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.UnitTests
 
             public IEnumerable<ICounterPayload> Metrics => _metrics.Values;
 
-            public void LogMetrics(ICounterPayload metric)
+            public void Log(ICounterPayload metric)
             {
-                _metrics[string.Concat(metric.GetProvider(), "_", metric.GetName())] = metric;
+                _metrics[string.Concat(metric.Provider, "_", metric.Name)] = metric;
             }
 
             public void PipelineStarted()
@@ -76,7 +76,7 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.UnitTests
 
                 var client = new DiagnosticsClient(testExecution.TestRunner.Pid);
 
-                EventCounterPipeline pipeline = new EventCounterPipeline(client, new EventPipeCounterPipelineSettings
+                await using EventCounterPipeline pipeline = new EventCounterPipeline(client, new EventPipeCounterPipelineSettings
                 {
                     Duration = TimeSpan.FromSeconds(10),
                     CounterGroups = new[]
@@ -98,22 +98,15 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.UnitTests
                 //Send signal to proceed with event collection
                 testExecution.Start();
 
-                try
-                {
-                    await pipelineTask;
-                }
-                finally
-                {
-                    await pipeline.DisposeAsync();
-                }
+                await pipelineTask;
             }
 
             Assert.True(logger.Metrics.Any());
 
-            var actualMetrics = logger.Metrics.Select(m => m.GetName()).OrderBy(m => m);
+            var actualMetrics = logger.Metrics.Select(m => m.Name).OrderBy(m => m);
 
             Assert.Equal(expectedCounters, actualMetrics);
-            Assert.True(logger.Metrics.All(m => string.Equals(m.GetProvider(), expectedProvider)));
+            Assert.True(logger.Metrics.All(m => string.Equals(m.Provider, expectedProvider)));
         }
 
         [SkippableFact]
@@ -135,7 +128,7 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.UnitTests
 
                 var client = new DiagnosticsClient(testExecution.TestRunner.Pid);
 
-                EventCounterPipeline pipeline = new EventCounterPipeline(client, new EventPipeCounterPipelineSettings
+                await using EventCounterPipeline pipeline = new EventCounterPipeline(client, new EventPipeCounterPipelineSettings
                 {
                     Duration = Timeout.InfiniteTimeSpan,
                     CounterGroups = new[]
@@ -157,21 +150,13 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.UnitTests
                 //Send signal to proceed with event collection
                 testExecution.Start();
 
-                try
-                {
-                    //Get metrics for a few seconds and then stop
-                    await Task.Delay(TimeSpan.FromSeconds(5));
-                    await pipeline.StopAsync();
-                }
-                finally
-                {
-                    await pipeline.DisposeAsync();
-                }
+                await Task.Delay(TimeSpan.FromSeconds(5));
+                await pipeline.StopAsync();
             }
 
-            var actualMetrics = logger.Metrics.Select(m => m.GetName()).OrderBy(m => m);
+            var actualMetrics = logger.Metrics.Select(m => m.Name).OrderBy(m => m);
             Assert.Equal(expectedCounters, actualMetrics);
-            Assert.True(logger.Metrics.All(m => string.Equals(m.GetProvider(), expectedProvider)));
+            Assert.True(logger.Metrics.All(m => string.Equals(m.Provider, expectedProvider)));
         }
 
         private RemoteTestExecution StartTraceeProcess(string loggerCategory)

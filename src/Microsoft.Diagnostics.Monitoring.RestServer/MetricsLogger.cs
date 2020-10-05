@@ -10,7 +10,7 @@ using System.Text;
 
 namespace Microsoft.Diagnostics.Monitoring
 {
-    public sealed class MetricsLogger : IMetricsLogger
+    internal sealed class MetricsLogger : ICountersLogger
     {
         private readonly IMetricsStore _store;
 
@@ -19,7 +19,7 @@ namespace Microsoft.Diagnostics.Monitoring
             _store = metricsStore;
         }
 
-        public void LogMetrics(ICounterPayload metric)
+        public void Log(ICounterPayload metric)
         {
             _store.AddMetric(metric);
         }

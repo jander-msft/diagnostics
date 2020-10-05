@@ -12,7 +12,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Diagnostics.Monitoring.Contracts;
 using Microsoft.Diagnostics.Monitoring.EventPipe;
 using Microsoft.Diagnostics.Monitoring.RestServer.Models;
 using Microsoft.Diagnostics.Monitoring.RestServer.Validation;
@@ -127,9 +126,7 @@ namespace Microsoft.Diagnostics.Monitoring.RestServer.Controllers
                     Duration = Timeout.InfiniteTimeSpan,
                     ProcessId = processInfo.ProcessId
                 };
-                EventGCPipeline pipeline = new EventGCPipeline(processInfo.Client, settings, graph);
-                
-                try
+                await using (EventGCDumpPipeline pipeline = new EventGCDumpPipeline(processInfo.Client, settings, graph))
                 {
                     await pipeline.RunAsync(HttpContext.RequestAborted);
                     var dumper = new GCHeapDump(graph);
@@ -142,10 +139,6 @@ namespace Microsoft.Diagnostics.Monitoring.RestServer.Controllers
                     stream.Position = 0;
 
                     return File(stream, "application/octet-stream", FormattableString.Invariant($"{GetFileNameTimeStampUtcNow()}_{processInfo.ProcessId}.gcdump"));
-                }
-                finally
-                {
-                    await pipeline.DisposeAsync();
                 }
             });
         }
