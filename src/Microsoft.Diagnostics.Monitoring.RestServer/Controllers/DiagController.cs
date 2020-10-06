@@ -91,8 +91,7 @@ namespace Microsoft.Diagnostics.Monitoring.RestServer.Controllers
 
                 EventGCPipelineSettings settings = new EventGCPipelineSettings
                 {
-                    Duration = Timeout.InfiniteTimeSpan,
-                    ProcessId = processInfo.Pid
+                    Duration = Timeout.InfiniteTimeSpan
                 };
                 EventGCPipeline pipeline = new EventGCPipeline(processInfo.Client, settings, graph);
                 
@@ -218,8 +217,7 @@ namespace Microsoft.Diagnostics.Monitoring.RestServer.Controllers
                     var settings = new EventLogsPipelineSettings
                     {
                         Duration = duration,
-                        LogLevel = level,
-                        ProcessId = processInfo.Pid
+                        LogLevel = level
                     };
                     await using EventLogsPipeline pipeline = new EventLogsPipeline(processInfo.Client, settings, loggerFactory);
                     await pipeline.RunAsync(token);

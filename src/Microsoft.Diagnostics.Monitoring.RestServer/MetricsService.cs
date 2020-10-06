@@ -50,7 +50,6 @@ namespace Microsoft.Diagnostics.Monitoring.RestServer
                         {
                             CounterGroups = Array.Empty<EventPipeCounterGroup>(),
                             Duration = Timeout.InfiniteTimeSpan,
-                            ProcessId = pi.Pid,
                             RefreshInterval = TimeSpan.FromSeconds(_metricsConfiguration.UpdateIntervalSeconds)
                         }, metricsLogger: new[] { new MetricsLogger(_store.MetricsStore) });
 

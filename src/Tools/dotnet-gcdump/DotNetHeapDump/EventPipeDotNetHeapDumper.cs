@@ -41,7 +41,6 @@ namespace Microsoft.Diagnostics.Tools.GCDump
 
             var settings = new EventGCPipelineSettings
             {
-                ProcessId = processID,
                 Duration = Timeout.InfiniteTimeSpan, //Maybe use Cancellation instead of duration
             };
 

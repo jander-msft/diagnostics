@@ -30,16 +30,10 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
 
         protected override async Task OnEventSourceAvailable(EventPipeEventSource source, Func<Task> stopSessionAsync, CancellationToken token)
         {
-            int pid = Settings.ProcessId;
             int gcNum = -1;
 
             Action<GCStartTraceData, Action> gcStartHandler = (GCStartTraceData data, Action taskComplete) =>
             {
-                if (data.ProcessID != pid)
-                {
-                    return;
-                }
-
                 taskComplete();
 
                 if (gcNum < 0 && data.Depth == 2 && data.Type != GCType.BackgroundGC)
@@ -50,21 +44,11 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
 
             Action<GCBulkNodeTraceData, Action> gcBulkNodeHandler = (GCBulkNodeTraceData data, Action taskComplete) =>
             {
-                if (data.ProcessID != pid)
-                {
-                    return;
-                }
-
                 taskComplete();
             };
 
             Action<GCEndTraceData, Action> gcEndHandler = (GCEndTraceData data, Action taskComplete) =>
             {
-                if (data.ProcessID != pid)
-                {
-                    return;
-                }
-
                 if (data.Count == gcNum)
                 {
                     taskComplete();
@@ -101,7 +85,7 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
             {
                 DotNetHeapInfo = new DotNetHeapInfo()
             };
-            dumper.SetupCallbacks(_gcGraph, source, pid.ToString(CultureInfo.InvariantCulture));
+            dumper.SetupCallbacks(_gcGraph, source);
 
             // The event source will not always provide the GC events when it starts listening. However,
             // they will be provided when the event source is told to stop processing events. Give the

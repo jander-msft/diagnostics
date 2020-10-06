@@ -42,8 +42,8 @@ namespace Microsoft.Diagnostics.Tools.Counters
 
             return await HandleExceptions(console, async () =>
             {
-                EventPipeCounterPipelineSettings settings = BuildSettings(processId, counter_list, refreshInterval, console);
-                await RunUILoop(settings, allowPause: true, new ConsoleWriter(), ct);
+                EventPipeCounterPipelineSettings settings = BuildSettings(counter_list, refreshInterval, console);
+                await RunUILoop(settings, processId, allowPause: true, new ConsoleWriter(), ct);
             });
         }
 
@@ -65,7 +65,7 @@ namespace Microsoft.Diagnostics.Tools.Counters
 
             return await HandleExceptions(console, async () =>
             {
-                EventPipeCounterPipelineSettings settings = BuildSettings(processId, counter_list, refreshInterval, console);
+                EventPipeCounterPipelineSettings settings = BuildSettings(counter_list, refreshInterval, console);
 
                 if (output.Length == 0)
                 {
@@ -107,7 +107,7 @@ namespace Microsoft.Diagnostics.Tools.Counters
                     IMetricsLogger logger = exporterFactory(outputStream);
 
                     Console.WriteLine("Starting a counter session. Press Q to quit.");
-                    await RunUILoop(settings, allowPause: false, logger, ct);
+                    await RunUILoop(settings, processId, allowPause: false, logger, ct);
                     Console.WriteLine("File saved to " + filePath);
                 }
             });
@@ -137,14 +137,9 @@ namespace Microsoft.Diagnostics.Tools.Counters
             return 1;
         }
 
-        private static EventPipeCounterPipelineSettings BuildSettings(int processId, List<string> counterList, int refreshInterval, IConsole console)
+        private static EventPipeCounterPipelineSettings BuildSettings(List<string> counterList, int refreshInterval, IConsole console)
         {
             EventPipeCounterPipelineSettings settings = new EventPipeCounterPipelineSettings();
-            if (processId == 0)
-            {
-                throw new CommandLineError("--process-id is required.");
-            }
-            settings.ProcessId = processId;
             settings.Duration = Timeout.InfiniteTimeSpan;
             settings.CounterGroups = BuildCounterGroups(counterList, console);
             settings.RefreshInterval = TimeSpan.FromSeconds(refreshInterval);
@@ -183,9 +178,9 @@ namespace Microsoft.Diagnostics.Tools.Counters
         }
         
 
-        private static async Task RunUILoop(EventPipeCounterPipelineSettings settings, bool allowPause, IMetricsLogger output, CancellationToken ct)
+        private static async Task RunUILoop(EventPipeCounterPipelineSettings settings, int processId, bool allowPause, IMetricsLogger output, CancellationToken ct)
         {
-            EventCounterPipeline pipeline = new EventCounterPipeline(new DiagnosticsClient(settings.ProcessId), settings, new IMetricsLogger[] { output });
+            EventCounterPipeline pipeline = new EventCounterPipeline(new DiagnosticsClient(processId), settings, new IMetricsLogger[] { output });
             bool startPipeline = true;
             while(true)
             {
@@ -216,7 +211,7 @@ namespace Microsoft.Diagnostics.Tools.Counters
                         }
                         else if(key == ConsoleKey.R && pipeline == null)
                         {
-                            pipeline = new EventCounterPipeline(new DiagnosticsClient(settings.ProcessId), settings, new IMetricsLogger[] { output });
+                            pipeline = new EventCounterPipeline(new DiagnosticsClient(processId), settings, new IMetricsLogger[] { output });
                             startPipeline = true;
                         }
                     }

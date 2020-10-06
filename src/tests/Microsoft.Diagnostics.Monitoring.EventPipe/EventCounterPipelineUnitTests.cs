@@ -87,7 +87,6 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.UnitTests
                             CounterNames = expectedCounters
                         }
                     },
-                    ProcessId = testExecution.TestRunner.Pid,
                     RefreshInterval = TimeSpan.FromSeconds(1)
                 }, new[] { logger });
 
@@ -146,7 +145,6 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.UnitTests
                             CounterNames = expectedCounters
                         }
                     },
-                    ProcessId = testExecution.TestRunner.Pid,
                     RefreshInterval = TimeSpan.FromSeconds(1)
                 }, new[] { logger });
 
