@@ -46,7 +46,6 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
             {
                 Task stoppingTask = _processor.Value.StopProcessing(token);
 
-                var taskCompletionSource = new TaskCompletionSource<bool>();
                 var src = new TaskCompletionSource<T>();
                 token.Register(() => src.SetCanceled());
                 return Task.WhenAny(stoppingTask, src.Task).Unwrap();
