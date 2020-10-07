@@ -10,6 +10,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Diagnostics.Monitoring.RestServer.Models;
@@ -23,6 +24,7 @@ namespace Microsoft.Diagnostics.Monitoring.RestServer.Controllers
     [Route("")] // Root
     [ApiController]
     [HostRestriction]
+    [Authorize]
     public class DiagController : ControllerBase
     {
         private const TraceProfile DefaultTraceProfiles = TraceProfile.Cpu | TraceProfile.Http | TraceProfile.Metrics;

@@ -4,6 +4,8 @@
 
 using System.Collections.Generic;
 using System.IO.Compression;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
@@ -29,6 +31,9 @@ namespace Microsoft.Diagnostics.Monitoring
         // This method gets called by the runtime. Use this method to add services to the container.
         public void ConfigureServices(IServiceCollection services)
         {
+            services.AddAuthentication("Basic")
+                .AddScheme<AuthenticationSchemeOptions, BasicAuthenticationHandler>("Basic", null);
+
             services.AddMvc(options =>
                 {
                     options.Filters.Add(new ProducesAttribute("application/json"));
@@ -87,6 +92,8 @@ namespace Microsoft.Diagnostics.Monitoring
             {
                 app.UseHsts();
             }
+
+            app.UseAuthentication();
 
             CorsConfiguration corsConfiguration = new CorsConfiguration();
             Configuration.Bind(nameof(CorsConfiguration), corsConfiguration);
