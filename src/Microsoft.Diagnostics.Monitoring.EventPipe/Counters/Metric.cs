@@ -3,18 +3,13 @@
 // See the LICENSE file in the project root for more information.
 
 using System;
-using System.Collections;
-using System.Collections.Generic;
-using System.Runtime.CompilerServices;
 
 namespace Microsoft.Diagnostics.Monitoring.EventPipe
 {
     public enum MetricType
     {
         Avg,
-        Sum,
-        Min,
-        Max
+        Sum
     }
 
     public class Metric : ICounterPayload

@@ -5,10 +5,12 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Diagnostics.Monitoring.EventPipe.Counters;
 using Microsoft.Diagnostics.NETCore.Client;
 using Microsoft.Diagnostics.Tracing;
 
@@ -29,7 +31,7 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
         protected override async Task OnEventSourceAvailable(EventPipeEventSource source, Func<Task> stopSessionAsync, CancellationToken token)
         {
             var stateMap = Settings.States.ToDictionary(s => s.Name);
-            var evaluators = new List<EventConditionEvaluator>();
+            var evaluators = new List<EventTriggerEvaluator>();
 
             Func<string, string, EventFilterResponse> eventFilter = (providerName, eventName) =>
             {
@@ -49,7 +51,16 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
             {
                 foreach (var trigger in currentState.Triggers)
                 {
-                    evaluators.Add(EventConditionEvaluator.FromTrigger(trigger));
+                    switch (trigger.Condition)
+                    {
+                        case EventTriggersPipelineEventTriggerCondition eventCondition:
+                            evaluators.Add(EventTriggerEvaluator.FromTrigger(trigger, eventCondition));
+                            break;
+                        case EventTriggersPipelineTimerTriggerCondition timerCondition:
+                            throw new NotSupportedException();
+                        default:
+                            throw new NotSupportedException();
+                    }
                 }
 
                 TaskCompletionSource<EventTriggersPipelineStateTrigger> tcs = new TaskCompletionSource<EventTriggersPipelineStateTrigger>();
@@ -78,9 +89,9 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
             while (stateMap.TryGetValue(nextStateName, out currentState));
         }
 
-        private abstract class EventConditionEvaluator
+        private abstract class EventTriggerEvaluator
         {
-            public EventConditionEvaluator(EventTriggersPipelineStateTrigger trigger, string providerName, string eventName, string counterName)
+            public EventTriggerEvaluator(EventTriggersPipelineStateTrigger trigger, string providerName, string eventName, string counterName)
             {
                 Trigger = trigger;
                 ProviderName = providerName;
@@ -88,16 +99,15 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
                 CounterName = counterName;
             }
 
-            public static EventConditionEvaluator FromTrigger(EventTriggersPipelineStateTrigger trigger)
+            public static EventTriggerEvaluator FromTrigger(EventTriggersPipelineStateTrigger trigger, EventTriggersPipelineEventTriggerCondition condition)
             {
-                switch (trigger.Condition)
+                Debug.Assert(trigger.Condition == condition);
+                switch (condition.Accessor)
                 {
-                    case EventTriggersPipelineEventTriggerCondition eventTriggerCondition:
-                        return new ScalarEventConditionEvaluator(
-                            trigger,
-                            eventTriggerCondition.ProviderName,
-                            eventTriggerCondition.EventName,
-                            eventTriggerCondition.CounterName);
+                    case EventTriggersPipelineEventTriggerConditionAggregateAccessor:
+                        throw new NotSupportedException();
+                    case EventTriggersPipelineEventTriggerConditionPropertyAccessor propertyAccessor:
+                        return new ScalarEventTriggerEvaluator(trigger, condition, propertyAccessor);
                 }
                 throw new NotSupportedException();
             }
@@ -119,15 +129,33 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
             public EventTriggersPipelineStateTrigger Trigger { get; }
         }
 
-        private class ScalarEventConditionEvaluator : EventConditionEvaluator
+        private class ScalarEventTriggerEvaluator : EventTriggerEvaluator
         {
-            public ScalarEventConditionEvaluator(EventTriggersPipelineStateTrigger trigger, string providerName, string eventName, string counterName)
-                : base(trigger, providerName, eventName, counterName)
+            private readonly string _propertyName;
+
+            public ScalarEventTriggerEvaluator(
+                EventTriggersPipelineStateTrigger trigger,
+                EventTriggersPipelineEventTriggerCondition condition,
+                EventTriggersPipelineEventTriggerConditionPropertyAccessor accessor)
+                : base(trigger, condition.ProviderName, condition.EventName, condition.CounterName)
             {
             }
 
             public override bool AcceptAndEvaluate(TraceEvent traceEvent)
             {
+                object valueObj = null;
+                if (traceEvent.TryGetCounterPayload(out ICounterPayload payload))
+                {
+                    if (!payload.TryGetValue(_propertyName, out object value))
+                    {
+                        return false;
+                    }
+                }
+                else
+                {
+
+                }
+
                 return false;
             }
         }
