@@ -28,13 +28,9 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.UnitTests
             _output = output;
         }
 
-        [SkippableFact]
+        [Fact]
         public async Task TestTraceStopAsync()
         {
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-            {
-                throw new SkipTestException("Unstable test on OSX");
-            }
             using var buffer = new MemoryStream();
 
             await using (var testExecution = StartTraceeProcess("TraceStopTest"))
@@ -56,16 +52,7 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.UnitTests
                     await s.CopyToAsync(buffer);
                 });
 
-                Task pipelineTask = pipeline.RunAsync(CancellationToken.None);
-
-                //Add a small delay to make sure diagnostic processor had a chance to initialize
-                await Task.Delay(1000);
-                //Send signal to proceed with event collection
-                testExecution.Start();
-
-                //Get cpu for a few seconds and then stop
-                await Task.Delay(TimeSpan.FromSeconds(5));
-                await pipeline.StopAsync();
+                await PipelineTestUtilities.ExecutePipelineWithDebugee(pipeline, testExecution);
             }
 
             Assert.True(buffer.Length > 0);

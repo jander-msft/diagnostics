@@ -58,14 +58,9 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.UnitTests
             }
         }
 
-        [SkippableFact]
+        [Fact]
         public async Task TestCounterEventPipeline()
         {
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-            {
-                throw new SkipTestException("Unstable test on OSX");
-            }
-
             var logger = new TestMetricsLogger(_output);
             var expectedCounters = new[] { "cpu-usage", "working-set" };
             string expectedProvider = "System.Runtime";
@@ -78,7 +73,7 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.UnitTests
 
                 await using EventCounterPipeline pipeline = new EventCounterPipeline(client, new EventPipeCounterPipelineSettings
                 {
-                    Duration = TimeSpan.FromSeconds(10),
+                    Duration = Timeout.InfiniteTimeSpan,
                     CounterGroups = new[]
                     {
                         new EventPipeCounterGroup
@@ -91,14 +86,7 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.UnitTests
                     RefreshInterval = TimeSpan.FromSeconds(1)
                 }, new[] { logger });
 
-                Task pipelineTask = pipeline.RunAsync(CancellationToken.None);
-
-                //Add a small delay to make sure diagnostic processor had a chance to initialize
-                await Task.Delay(1000);
-                //Send signal to proceed with event collection
-                testExecution.Start();
-
-                await pipelineTask;
+                await PipelineTestUtilities.ExecutePipelineWithDebugee(pipeline, testExecution);
             }
 
             Assert.True(logger.Metrics.Any());
@@ -109,14 +97,9 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.UnitTests
             Assert.True(logger.Metrics.All(m => string.Equals(m.Provider, expectedProvider)));
         }
 
-        [SkippableFact]
+        [Fact]
         public async Task TestStopAsync()
         {
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-            {
-                throw new SkipTestException("Unstable test on OSX");
-            }
-
             var logger = new TestMetricsLogger(_output);
             
             var expectedCounters = new[] { "cpu-usage", "working-set" };
@@ -143,15 +126,7 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.UnitTests
                     RefreshInterval = TimeSpan.FromSeconds(1)
                 }, new[] { logger });
 
-                Task pipelineTask = pipeline.RunAsync(CancellationToken.None);
-
-                //Add a small delay to make sure diagnostic processor had a chance to initialize
-                await Task.Delay(1000);
-                //Send signal to proceed with event collection
-                testExecution.Start();
-
-                await Task.Delay(TimeSpan.FromSeconds(5));
-                await pipeline.StopAsync();
+                await PipelineTestUtilities.ExecutePipelineWithDebugee(pipeline, testExecution);
             }
 
             var actualMetrics = logger.Metrics.Select(m => m.Name).OrderBy(m => m);
