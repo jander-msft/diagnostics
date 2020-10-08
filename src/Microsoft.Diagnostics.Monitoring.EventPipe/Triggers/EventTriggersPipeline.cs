@@ -3,14 +3,12 @@
 // See the LICENSE file in the project root for more information.
 
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.Linq;
-using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Diagnostics.Monitoring.EventPipe.Counters;
 using Microsoft.Diagnostics.NETCore.Client;
 using Microsoft.Diagnostics.Tracing;
 
@@ -45,6 +43,17 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
                 }
             };
 
+            CounterFilter filter = new CounterFilter();
+            foreach (var provider in Settings.Configuration.GetProviders())
+            {
+                if (null != provider.Arguments &&
+                    provider.Arguments.TryGetValue("EventCounterIntervalSec", out string intervalSecString) &&
+                    int.TryParse(intervalSecString, NumberStyles.None, NumberFormatInfo.InvariantInfo, out int intervalSec))
+                {
+                    filter.AddFilter(provider.Name, intervalSec * 1000);
+                }
+            }
+
             EventTriggersPipelineState currentState = Settings.States[0];
             string nextStateName = null;
             do
@@ -54,7 +63,7 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
                     switch (trigger.Condition)
                     {
                         case EventTriggersPipelineEventTriggerCondition eventCondition:
-                            evaluators.Add(EventTriggerEvaluator.FromTrigger(trigger, eventCondition));
+                            evaluators.Add(EventTriggerEvaluator.FromTrigger(trigger, eventCondition, filter));
                             break;
                         case EventTriggersPipelineTimerTriggerCondition timerCondition:
                             throw new NotSupportedException();
@@ -99,7 +108,7 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
                 CounterName = counterName;
             }
 
-            public static EventTriggerEvaluator FromTrigger(EventTriggersPipelineStateTrigger trigger, EventTriggersPipelineEventTriggerCondition condition)
+            public static EventTriggerEvaluator FromTrigger(EventTriggersPipelineStateTrigger trigger, EventTriggersPipelineEventTriggerCondition condition, CounterFilter filter)
             {
                 Debug.Assert(trigger.Condition == condition);
                 switch (condition.Accessor)
@@ -107,7 +116,7 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
                     case EventTriggersPipelineEventTriggerConditionAggregateAccessor:
                         throw new NotSupportedException();
                     case EventTriggersPipelineEventTriggerConditionPropertyAccessor propertyAccessor:
-                        return new ScalarEventTriggerEvaluator(trigger, condition, propertyAccessor);
+                        return new ScalarEventTriggerEvaluator(trigger, condition, propertyAccessor, filter);
                 }
                 throw new NotSupportedException();
             }
@@ -131,29 +140,45 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
 
         private class ScalarEventTriggerEvaluator : EventTriggerEvaluator
         {
+            private readonly CounterFilter _filter;
             private readonly string _propertyName;
 
             public ScalarEventTriggerEvaluator(
                 EventTriggersPipelineStateTrigger trigger,
                 EventTriggersPipelineEventTriggerCondition condition,
-                EventTriggersPipelineEventTriggerConditionPropertyAccessor accessor)
+                EventTriggersPipelineEventTriggerConditionPropertyAccessor accessor,
+                CounterFilter filter)
                 : base(trigger, condition.ProviderName, condition.EventName, condition.CounterName)
             {
+                _filter = filter;
+                _propertyName = accessor.PropertyName;
             }
 
             public override bool AcceptAndEvaluate(TraceEvent traceEvent)
             {
                 object valueObj = null;
-                if (traceEvent.TryGetCounterPayload(out ICounterPayload payload))
+                if (traceEvent.TryGetCounterPayload(out IDictionary<string, object> payload))
                 {
+                    if (!_filter.IsIncluded(traceEvent.ProviderName, payload))
+                    {
+                        return false;
+                    }
+
                     if (!payload.TryGetValue(_propertyName, out object value))
                     {
                         return false;
                     }
+
+                    valueObj = value;
                 }
                 else
                 {
-
+                    int payloadIndex = traceEvent.PayloadIndex(_propertyName);
+                    if (payloadIndex < 0)
+                    {
+                        return false;
+                    }
+                    valueObj = traceEvent.PayloadValue(payloadIndex);
                 }
 
                 return false;

@@ -27,7 +27,7 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
                 _filter = new CounterFilter();
                 foreach (var counterGroup in settings.CounterGroups)
                 {
-                    _filter.AddFilter(counterGroup.ProviderName, counterGroup.CounterNames);
+                    _filter.AddFilter(counterGroup.ProviderName, MetricsIntervalSeconds * 1000, counterGroup.CounterNames);
                 }
             }
             else
@@ -52,24 +52,15 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
                     try
                     {
                         // Metrics
-                        if (traceEvent.EventName.Equals("EventCounters"))
+                        if (traceEvent.TryGetCounterPayload(out IDictionary<string, object> payloadFields))
                         {
-                            IDictionary<string, object> payloadVal = (IDictionary<string, object>)(traceEvent.PayloadValue(0));
-                            IDictionary<string, object> payloadFields = (IDictionary<string, object>)(payloadVal["Payload"]);
-
                             //Make sure we are part of the requested series. If multiple clients request metrics, all of them get the metrics.
-                            string series = payloadFields["Series"].ToString();
-                            if (GetInterval(series) != MetricsIntervalSeconds * 1000)
+                            if (!_filter.IsIncluded(traceEvent.ProviderName, payloadFields))
                             {
                                 return;
                             }
 
                             string counterName = payloadFields["Name"].ToString();
-                            if (!_filter.Include(traceEvent.ProviderName, counterName))
-                            {
-                                return;
-                            }
-
                             float intervalSec = (float)payloadFields["IntervalSec"];
                             string displayName = payloadFields["DisplayName"].ToString();
                             string displayUnits = payloadFields["DisplayUnits"].ToString();
@@ -141,17 +132,6 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
             await base.OnDispose();
         }
 
-        private static int GetInterval(string series)
-        {
-            const string comparison = "Interval=";
-            int interval = 0;
-            if (series.StartsWith(comparison, StringComparison.OrdinalIgnoreCase))
-            {
-                int.TryParse(series.Substring(comparison.Length), out interval);
-            }
-            return interval;
-        }
-
         private void ExecuteMetricLoggerAction(Action<IMetricsLogger> action)
         {
             foreach (IMetricsLogger metricLogger in _metricsLogger)
@@ -166,6 +146,6 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
             }
         }
 
-        private int MetricsIntervalSeconds => (int)Settings.Duration.TotalSeconds;
+        private int MetricsIntervalSeconds => (int)Settings.RefreshInterval.TotalSeconds;
     }
 }
