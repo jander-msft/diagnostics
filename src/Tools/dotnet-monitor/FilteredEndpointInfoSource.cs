@@ -9,6 +9,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Diagnostics.Monitoring;
+using Microsoft.Diagnostics.Monitoring.EventPipe;
 using Microsoft.Diagnostics.NETCore.Client;
 using Microsoft.Extensions.Options;
 
@@ -34,7 +35,7 @@ namespace Microsoft.Diagnostics.Tools.Monitor
                     _source = new ClientEndpointInfoSource();
                     break;
                 case DiagnosticPortConnectionMode.Listen:
-                    _source = new ServerEndpointInfoSource(_configuration.EndpointName);
+                    _source = new ServerEndpointInfoSource(_configuration.EndpointName, OnConnect);
                     break;
                 default:
                     throw new InvalidOperationException($"Unhandled connection mode: {_configuration.ConnectionMode}");
@@ -105,6 +106,47 @@ namespace Microsoft.Diagnostics.Tools.Monitor
             {
                 source.Start(_configuration.MaxConnections.GetValueOrDefault(ReversedDiagnosticsServer.MaxAllowedConnections));
             }
+        }
+
+        private List<EventTriggersPipeline> _pipelines = new List<EventTriggersPipeline>();
+
+        private void OnConnect(IpcEndpointInfo info)
+        {
+            var pipeline = new EventTriggersPipeline(
+                new DiagnosticsClient(info.Endpoint),
+                new EventTriggersPipelineSettings()
+                {
+                    Duration = Timeout.InfiniteTimeSpan,
+                    Configuration = new MetricSourceConfiguration(5, Array.Empty<string>()),
+                    States = new[]
+                    {
+                        new EventTriggersPipelineState()
+                        {
+                            Name = "default",
+                            Triggers = new[]
+                            {
+                                new EventTriggersPipelineStateTrigger()
+                                {
+                                    Condition = new EventTriggersPipelineEventTriggerCondition()
+                                    {
+                                        ProviderName = "System.Runtime",
+                                        EventName = "EventCounters",
+                                        CounterName = "cpu-usage",
+                                        Accessor = new EventTriggersPipelineEventTriggerConditionPropertyAccessor()
+                                        {
+                                            PropertyName = "Mean"
+                                        },
+                                        Operator = ">",
+                                        Value = "1"
+                                    },
+                                    TargetState = "default"
+                                }
+                            }
+                        }
+                    }
+                });
+            pipeline.RunAsync(CancellationToken.None);
+            _pipelines.Add(pipeline);
         }
     }
 }

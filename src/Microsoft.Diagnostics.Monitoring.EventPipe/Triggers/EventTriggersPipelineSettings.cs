@@ -6,21 +6,21 @@ using System;
 
 namespace Microsoft.Diagnostics.Monitoring.EventPipe
 {
-    internal class EventTriggersPipelineSettings : EventSourcePipelineSettings
+    public class EventTriggersPipelineSettings : EventSourcePipelineSettings
     {
         public MonitoringSourceConfiguration Configuration { get; set; }
 
         public EventTriggersPipelineState[] States { get; set; }
     }
 
-    internal class EventTriggersPipelineState
+    public class EventTriggersPipelineState
     {
         public string Name { get; set; }
 
         public EventTriggersPipelineStateTrigger[] Triggers { get; set; }
     }
 
-    internal class EventTriggersPipelineStateTrigger
+    public class EventTriggersPipelineStateTrigger
     {
         public EventTriggersPipelineTriggerCondition Condition { get; set; }
 
@@ -29,12 +29,12 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
         public string TargetState { get; set; }
     }
 
-    internal abstract class EventTriggersPipelineTriggerCondition
+    public abstract class EventTriggersPipelineTriggerCondition
     {
         public abstract string Type { get; }
     }
 
-    internal class EventTriggersPipelineEventTriggerCondition :
+    public class EventTriggersPipelineEventTriggerCondition :
         EventTriggersPipelineTriggerCondition
     {
         public override string Type => "event";
@@ -52,12 +52,12 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
         public string Value { get; set; }
     }
 
-    internal abstract class EventTriggersPipelineEventTriggerConditionPayloadAccessor
+    public abstract class EventTriggersPipelineEventTriggerConditionPayloadAccessor
     {
         public abstract string Type { get; }
     }
 
-    internal class EventTriggersPipelineEventTriggerConditionPropertyAccessor :
+    public class EventTriggersPipelineEventTriggerConditionPropertyAccessor :
         EventTriggersPipelineEventTriggerConditionPayloadAccessor
     {
         public override string Type => "property";
@@ -65,7 +65,7 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
         public string PropertyName { get; set; }
     }
 
-    internal class EventTriggersPipelineEventTriggerConditionAggregateAccessor :
+    public class EventTriggersPipelineEventTriggerConditionAggregateAccessor :
         EventTriggersPipelineEventTriggerConditionPayloadAccessor
     {
         public override string Type => "aggregate";
@@ -77,7 +77,7 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
         public string PropertyName { get; set; }
     }
 
-    internal class EventTriggersPipelineTimerTriggerCondition :
+    public class EventTriggersPipelineTimerTriggerCondition :
         EventTriggersPipelineTriggerCondition
     {
         public override string Type => "timer";
@@ -85,7 +85,7 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
         public TimeSpan Expiration { get; set; }
     }
 
-    internal class EventTriggersPipelineExecutableAction
+    public class EventTriggersPipelineExecutableAction
     {
         public string Type { get; set; }
     }

@@ -7,6 +7,8 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
+using System.Linq.Expressions;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Diagnostics.NETCore.Client;
@@ -14,7 +16,7 @@ using Microsoft.Diagnostics.Tracing;
 
 namespace Microsoft.Diagnostics.Monitoring.EventPipe
 {
-    internal class EventTriggersPipeline : EventSourcePipeline<EventTriggersPipelineSettings>
+    public class EventTriggersPipeline : EventSourcePipeline<EventTriggersPipelineSettings>
     {
         public EventTriggersPipeline(DiagnosticsClient client, EventTriggersPipelineSettings settings)
             : base(client, settings)
@@ -53,6 +55,8 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
                     intervalMap.Add(provider.Name, intervalSec * 1000);
                 }
             }
+
+            using AutoResetEvent continueEvent = new AutoResetEvent(false);
 
             EventTriggersPipelineState currentState = Settings.States[0];
             string nextStateName = null;
@@ -94,12 +98,18 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
                         if (evaluator.AcceptAndEvaluate(traceEvent))
                         {
                             tcs.SetResult(evaluator.Trigger);
+                            continueEvent.WaitOne();
                             break;
                         }
                     }
                 };
 
                 source.Dynamic.AddCallbackForProviderEvents(eventFilter, eventHandler);
+
+                if (!string.IsNullOrEmpty(nextStateName))
+                {
+                    continueEvent.Set();
+                }
 
                 EventTriggersPipelineStateTrigger satisfiedTrigger = await tcs.Task;
 
@@ -138,7 +148,11 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
 
         private class ScalarEventTriggerEvaluator : EventTriggerEvaluator
         {
+            private readonly string _operatorName;
             private readonly string _propertyName;
+            private readonly string _value;
+
+            private Func<object, bool> _condition;
 
             public ScalarEventTriggerEvaluator(
                 EventTriggersPipelineStateTrigger trigger,
@@ -147,6 +161,8 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
                 : base(trigger, condition.ProviderName, condition.EventName)
             {
                 _propertyName = accessor.PropertyName;
+                _operatorName = condition.Operator;
+                _value = condition.Value;
             }
 
             public override bool AcceptAndEvaluate(TraceEvent traceEvent)
@@ -156,7 +172,73 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
                     return false;
                 }
 
-                return false;
+                Func<object, bool> condition = GetCondition(value);
+                if (null == condition)
+                {
+                    return false;
+                }
+
+                return condition(value);
+            }
+
+            private Func<object, bool> GetCondition(object propertyValue)
+            {
+                if (null != _condition)
+                {
+                    return _condition;
+                }
+
+                if (null != propertyValue)
+                {
+                    Type propertyType = propertyValue.GetType();
+
+                    var valueParamExpr = Expression.Parameter(typeof(object), "o");
+                    var castValueExpr = Expression.Convert(valueParamExpr, propertyType);
+
+                    Type formatProviderType = Type.GetType("System.IFormatProvider");
+                    var convertConstMethod = Type.GetType("System.Convert").GetMethod(
+                        "To" + propertyType.Name,
+                        BindingFlags.Public | BindingFlags.Static,
+                        Type.DefaultBinder,
+                        new[] { typeof(string), formatProviderType },
+                        new[] { new ParameterModifier() });
+
+                    var convertedValue = convertConstMethod.Invoke(null, new object[] { _value, CultureInfo.InvariantCulture });
+
+                    var constExpr = Expression.Constant(convertedValue, propertyType);
+
+                    ExpressionType binaryOperator;
+                    switch (_operatorName)
+                    {
+                        case ">":
+                            binaryOperator = ExpressionType.GreaterThan;
+                            break;
+                        case ">=":
+                            binaryOperator = ExpressionType.GreaterThanOrEqual;
+                            break;
+                        case "<":
+                            binaryOperator = ExpressionType.LessThan;
+                            break;
+                        case "<=":
+                            binaryOperator = ExpressionType.LessThanOrEqual;
+                            break;
+                        case "==":
+                            binaryOperator = ExpressionType.Equal;
+                            break;
+                        case "!=":
+                            binaryOperator = ExpressionType.NotEqual;
+                            break;
+                        default:
+                            return null;
+                    }
+
+                    var comparisonExpr = Expression.MakeBinary(binaryOperator, castValueExpr, constExpr);
+                    var funcExpr = Expression.Lambda<Func<object, bool>>(comparisonExpr, valueParamExpr);
+
+                    _condition = funcExpr.Compile();
+                }
+
+                return _condition;
             }
 
             protected virtual bool TryGetPayloadValue(TraceEvent traceEvent, string propertyName, out object value)
@@ -192,12 +274,7 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
             {
                 value = null;
 
-                if (!traceEvent.TryGetCounterPayload(out IDictionary<string, object> payload))
-                {
-                    return false;
-                }
-
-                if (!_filter.IsIncluded(traceEvent.ProviderName, payload))
+                if (!traceEvent.TryGetCounterPayload(_filter, out IDictionary<string, object> payload))
                 {
                     return false;
                 }

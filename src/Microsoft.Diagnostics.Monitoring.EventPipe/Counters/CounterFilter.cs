@@ -35,13 +35,6 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
 
         public IEnumerable<string> GetProviders() => _enabledCounters.Keys;
 
-        public bool IsIncluded(string providerName, IDictionary<string, object> payload)
-        {
-            return TryGetCounterName(payload, out string counterName) &&
-                TryGetSeries(payload, out int seriesIntervalMSec) &&
-                IsIncluded(providerName, seriesIntervalMSec, counterName);
-        }
-
         public bool IsIncluded(string providerName, int intervalMSec, string counterName)
         {
             if (_enabledCounters.Count == 0)
@@ -54,34 +47,6 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
                 return enabledCounters.Count == 0 || (enabledCounters.Contains(counterName, StringComparer.OrdinalIgnoreCase) && providerIntervalMSec == intervalMSec);
             }
             return false;
-        }
-
-        public static bool TryGetCounterName(IDictionary<string, object> payload, out string counterName)
-        {
-            return payload.TryGetValue("CounterName", out counterName);
-        }
-
-        public static bool TryGetSeries(IDictionary<string, object> payload, out int intervalMSec)
-        {
-            if (payload.TryGetValue("Series", out string series))
-            {
-                intervalMSec = GetInterval(series);
-                return true;
-            }
-
-            intervalMSec = 0;
-            return false;
-        }
-
-        private static int GetInterval(string series)
-        {
-            const string comparison = "Interval=";
-            int interval = 0;
-            if (series.StartsWith(comparison, StringComparison.OrdinalIgnoreCase))
-            {
-                int.TryParse(series.Substring(comparison.Length), out interval);
-            }
-            return interval;
         }
     }
 }

@@ -25,6 +25,7 @@ namespace Microsoft.Diagnostics.Monitoring
         private readonly CancellationTokenSource _cancellation = new CancellationTokenSource();
         private readonly IList<IpcEndpointInfo> _endpointInfos = new List<IpcEndpointInfo>();
         private readonly SemaphoreSlim _endpointInfosSemaphore = new SemaphoreSlim(1);
+        private readonly Action<IpcEndpointInfo> _onConnect;
         private readonly string _transportPath;
 
         private Task _listenTask;
@@ -40,8 +41,9 @@ namespace Microsoft.Diagnostics.Monitoring
         /// On Windows, this can be a full pipe path or the name without the "\\.\pipe\" prefix.
         /// On all other systems, this must be the full file path of the socket.
         /// </param>
-        public ServerEndpointInfoSource(string transportPath)
+        public ServerEndpointInfoSource(string transportPath, Action<IpcEndpointInfo> onConnect)
         {
+            _onConnect = onConnect;
             _transportPath = transportPath;
         }
 
@@ -194,6 +196,8 @@ namespace Microsoft.Diagnostics.Monitoring
         {
             try
             {
+                _onConnect?.Invoke(info);
+
                 // Send ResumeRuntime message for runtime instances that connect to the server. This will allow
                 // those instances that are configured to pause on start to resume after the diagnostics
                 // connection has been made. Instances that are not configured to pause on startup will ignore
