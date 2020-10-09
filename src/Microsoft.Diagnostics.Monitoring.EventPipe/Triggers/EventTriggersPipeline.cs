@@ -43,14 +43,14 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
                 }
             };
 
-            CounterFilter filter = new CounterFilter();
+            IDictionary<string, int> intervalMap = new Dictionary<string, int>(StringComparer.Ordinal);
             foreach (var provider in Settings.Configuration.GetProviders())
             {
                 if (null != provider.Arguments &&
                     provider.Arguments.TryGetValue("EventCounterIntervalSec", out string intervalSecString) &&
                     int.TryParse(intervalSecString, NumberStyles.None, NumberFormatInfo.InvariantInfo, out int intervalSec))
                 {
-                    filter.AddFilter(provider.Name, intervalSec * 1000);
+                    intervalMap.Add(provider.Name, intervalSec * 1000);
                 }
             }
 
@@ -63,7 +63,21 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
                     switch (trigger.Condition)
                     {
                         case EventTriggersPipelineEventTriggerCondition eventCondition:
-                            evaluators.Add(EventTriggerEvaluator.FromTrigger(trigger, eventCondition, filter));
+                            if (eventCondition.Accessor is EventTriggersPipelineEventTriggerConditionAggregateAccessor)
+                            {
+                                throw new NotSupportedException();
+                            }
+                            else if (eventCondition.Accessor is EventTriggersPipelineEventTriggerConditionPropertyAccessor propertyAccessor)
+                            {
+                                if (string.IsNullOrEmpty(eventCondition.CounterName))
+                                {
+                                    evaluators.Add(new ScalarEventTriggerEvaluator(trigger, eventCondition, propertyAccessor));
+                                }
+                                else if (intervalMap.TryGetValue(eventCondition.ProviderName, out int intervalMSec))
+                                {
+                                    evaluators.Add(new ScalarCounterTriggerEvaluator(trigger, eventCondition, propertyAccessor, intervalMSec));
+                                }
+                            }
                             break;
                         case EventTriggersPipelineTimerTriggerCondition timerCondition:
                             throw new NotSupportedException();
@@ -100,25 +114,11 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
 
         private abstract class EventTriggerEvaluator
         {
-            public EventTriggerEvaluator(EventTriggersPipelineStateTrigger trigger, string providerName, string eventName, string counterName)
+            public EventTriggerEvaluator(EventTriggersPipelineStateTrigger trigger, string providerName, string eventName)
             {
                 Trigger = trigger;
                 ProviderName = providerName;
                 EventName = eventName;
-                CounterName = counterName;
-            }
-
-            public static EventTriggerEvaluator FromTrigger(EventTriggersPipelineStateTrigger trigger, EventTriggersPipelineEventTriggerCondition condition, CounterFilter filter)
-            {
-                Debug.Assert(trigger.Condition == condition);
-                switch (condition.Accessor)
-                {
-                    case EventTriggersPipelineEventTriggerConditionAggregateAccessor:
-                        throw new NotSupportedException();
-                    case EventTriggersPipelineEventTriggerConditionPropertyAccessor propertyAccessor:
-                        return new ScalarEventTriggerEvaluator(trigger, condition, propertyAccessor, filter);
-                }
-                throw new NotSupportedException();
             }
 
             public bool CanAccept(string providerName, string eventName)
@@ -133,55 +133,76 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
 
             public string EventName { get; }
 
-            public string CounterName { get; }
-
             public EventTriggersPipelineStateTrigger Trigger { get; }
         }
 
         private class ScalarEventTriggerEvaluator : EventTriggerEvaluator
         {
-            private readonly CounterFilter _filter;
             private readonly string _propertyName;
 
             public ScalarEventTriggerEvaluator(
                 EventTriggersPipelineStateTrigger trigger,
                 EventTriggersPipelineEventTriggerCondition condition,
-                EventTriggersPipelineEventTriggerConditionPropertyAccessor accessor,
-                CounterFilter filter)
-                : base(trigger, condition.ProviderName, condition.EventName, condition.CounterName)
+                EventTriggersPipelineEventTriggerConditionPropertyAccessor accessor)
+                : base(trigger, condition.ProviderName, condition.EventName)
             {
-                _filter = filter;
                 _propertyName = accessor.PropertyName;
             }
 
             public override bool AcceptAndEvaluate(TraceEvent traceEvent)
             {
-                object valueObj = null;
-                if (traceEvent.TryGetCounterPayload(out IDictionary<string, object> payload))
+                if (!TryGetPayloadValue(traceEvent, _propertyName, out object value))
                 {
-                    if (!_filter.IsIncluded(traceEvent.ProviderName, payload))
-                    {
-                        return false;
-                    }
-
-                    if (!payload.TryGetValue(_propertyName, out object value))
-                    {
-                        return false;
-                    }
-
-                    valueObj = value;
-                }
-                else
-                {
-                    int payloadIndex = traceEvent.PayloadIndex(_propertyName);
-                    if (payloadIndex < 0)
-                    {
-                        return false;
-                    }
-                    valueObj = traceEvent.PayloadValue(payloadIndex);
+                    return false;
                 }
 
                 return false;
+            }
+
+            protected virtual bool TryGetPayloadValue(TraceEvent traceEvent, string propertyName, out object value)
+            {
+                int payloadIndex = traceEvent.PayloadIndex(_propertyName);
+                if (payloadIndex < 0)
+                {
+                    value = null;
+                    return false;
+                }
+
+                value = traceEvent.PayloadValue(payloadIndex);
+                return true;
+            }
+        }
+
+        private class ScalarCounterTriggerEvaluator : ScalarEventTriggerEvaluator
+        {
+            private readonly CounterFilter _filter;
+
+            public ScalarCounterTriggerEvaluator(
+                EventTriggersPipelineStateTrigger trigger,
+                EventTriggersPipelineEventTriggerCondition condition,
+                EventTriggersPipelineEventTriggerConditionPropertyAccessor accessor,
+                int intervalMSec)
+                : base(trigger, condition, accessor)
+            {
+                _filter = new CounterFilter();
+                _filter.AddFilter(condition.ProviderName, intervalMSec, new[] { condition.CounterName });
+            }
+
+            protected override bool TryGetPayloadValue(TraceEvent traceEvent, string propertyName, out object value)
+            {
+                value = null;
+
+                if (!traceEvent.TryGetCounterPayload(out IDictionary<string, object> payload))
+                {
+                    return false;
+                }
+
+                if (!_filter.IsIncluded(traceEvent.ProviderName, payload))
+                {
+                    return false;
+                }
+
+                return payload.TryGetValue(propertyName, out value);
             }
         }
     }
