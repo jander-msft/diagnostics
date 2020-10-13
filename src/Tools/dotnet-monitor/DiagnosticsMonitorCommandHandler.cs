@@ -5,7 +5,9 @@
 using System;
 using System.Collections.Generic;
 using System.CommandLine;
+using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore;
@@ -20,7 +22,9 @@ namespace Microsoft.Diagnostics.Tools.Monitor
     internal sealed class DiagnosticsMonitorCommandHandler
     {
         private const string ConfigPrefix = "DotnetMonitor_";
-        private const string ConfigPath = "/etc/dotnet-monitor";
+        private readonly string ConfigPath = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ?
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "dotnet-monitor") :
+            "/etc/dotnet-monitor";
 
         public async Task<int> Start(CancellationToken token, IConsole console, string[] urls, string[] metricUrls, bool metrics, string reversedServerAddress)
         {
