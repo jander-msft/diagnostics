@@ -46,10 +46,7 @@ namespace Microsoft.Diagnostics.Tools.Monitor
                 {
                     //Note these are in precedence order.
                     ConfigureEndpointInfoSource(builder, reversedServerAddress);
-                    if (metrics)
-                    {
-                        ConfigureMetricsEndpoint(builder, metricUrls);
-                    }
+                    ConfigureMetricsEndpoint(builder, metrics, metricUrls);
                     builder.AddKeyPerFile(ConfigPath, optional: true);
                     builder.AddEnvironmentVariables(ConfigPrefix);
                 })
@@ -60,10 +57,7 @@ namespace Microsoft.Diagnostics.Tools.Monitor
                     services.AddSingleton<IEndpointInfoSource, FilteredEndpointInfoSource>();
                     services.AddHostedService<FilteredEndpointInfoSourceHostedService>();
                     services.AddSingleton<IDiagnosticServices, DiagnosticServices>();
-                    if (metrics)
-                    {
-                        services.Configure<PrometheusConfiguration>(context.Configuration.GetSection(nameof(PrometheusConfiguration)));
-                    }
+                    services.Configure<PrometheusConfiguration>(context.Configuration.GetSection(nameof(PrometheusConfiguration)));
                 })
                 .UseUrls(urls)
                 .UseStartup<Startup>();
@@ -71,12 +65,12 @@ namespace Microsoft.Diagnostics.Tools.Monitor
             return builder;
         }
 
-        private static void ConfigureMetricsEndpoint(IConfigurationBuilder builder, string[] metricEndpoints)
+        private static void ConfigureMetricsEndpoint(IConfigurationBuilder builder, bool enabled, string[] metricEndpoints)
         {
             builder.AddInMemoryCollection(new Dictionary<string, string>
             {
                 {MakeKey(nameof(PrometheusConfiguration), nameof(PrometheusConfiguration.Endpoints)), string.Join(';', metricEndpoints)},
-                {MakeKey(nameof(PrometheusConfiguration), nameof(PrometheusConfiguration.Enabled)), true.ToString()},
+                {MakeKey(nameof(PrometheusConfiguration), nameof(PrometheusConfiguration.Enabled)), enabled.ToString()},
                 {MakeKey(nameof(PrometheusConfiguration), nameof(PrometheusConfiguration.UpdateIntervalSeconds)), 10.ToString()},
                 {MakeKey(nameof(PrometheusConfiguration), nameof(PrometheusConfiguration.MetricCount)), 3.ToString()}
             });
