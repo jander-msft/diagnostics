@@ -23,6 +23,7 @@ namespace Microsoft.Diagnostics.Monitoring
         private static readonly TimeSpan PruneWaitForConnectionTimeout = TimeSpan.FromMilliseconds(250);
 
         private readonly CancellationTokenSource _cancellation = new CancellationTokenSource();
+        private readonly IpcClient _client;
         private readonly IList<EndpointInfo> _endpointInfos = new List<EndpointInfo>();
         private readonly SemaphoreSlim _endpointInfosSemaphore = new SemaphoreSlim(1);
         private readonly string _transportPath;
@@ -41,7 +42,13 @@ namespace Microsoft.Diagnostics.Monitoring
         /// On all other systems, this must be the full file path of the socket.
         /// </param>
         public ServerEndpointInfoSource(string transportPath)
+            : this(transportPath, new IpcClient())
         {
+        }
+
+        internal ServerEndpointInfoSource(string transportPath, IpcClient client)
+        {
+            _client = client;
             _transportPath = transportPath;
         }
 
@@ -198,7 +205,7 @@ namespace Microsoft.Diagnostics.Monitoring
                 // those instances that are configured to pause on start to resume after the diagnostics
                 // connection has been made. Instances that are not configured to pause on startup will ignore
                 // the command and return success.
-                var client = new DiagnosticsClient(info.Endpoint);
+                var client = new DiagnosticsClient(info.Endpoint, _client);
                 try
                 {
                     client.ResumeRuntime();
@@ -208,7 +215,7 @@ namespace Microsoft.Diagnostics.Monitoring
                     // The runtime likely doesn't understand the ResumeRuntime command.
                 }
 
-                EndpointInfo endpointInfo = EndpointInfo.FromIpcEndpointInfo(info);
+                EndpointInfo endpointInfo = EndpointInfo.FromIpcEndpointInfo(info, _client);
 
                 await _endpointInfosSemaphore.WaitAsync(token).ConfigureAwait(false);
                 try

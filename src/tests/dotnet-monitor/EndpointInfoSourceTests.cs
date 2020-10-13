@@ -171,11 +171,13 @@ namespace DotnetMonitor.UnitTests
 
         private sealed class TestServerEndpointInfoSource : ServerEndpointInfoSource
         {
+            private static readonly TimeSpan IpcClientConnectTimeout = TimeSpan.FromSeconds(30);
+
             private readonly ITestOutputHelper _outputHelper;
             private readonly List<TaskCompletionSource<EndpointInfo>> _addedEndpointInfoSources = new List<TaskCompletionSource<EndpointInfo>>();
 
             public TestServerEndpointInfoSource(string transportPath, ITestOutputHelper outputHelper)
-                : base(transportPath)
+                : base(transportPath, new IpcClient(IpcClientConnectTimeout))
             {
                 _outputHelper = outputHelper;
             }

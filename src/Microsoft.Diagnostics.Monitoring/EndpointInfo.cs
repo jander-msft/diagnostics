@@ -47,9 +47,9 @@ namespace Microsoft.Diagnostics.Monitoring
             };
         }
 
-        public static EndpointInfo FromIpcEndpointInfo(IpcEndpointInfo info)
+        public static EndpointInfo FromIpcEndpointInfo(IpcEndpointInfo info, IpcClient ipcClient)
         {
-            var client = new DiagnosticsClient(info.Endpoint);
+            var client = new DiagnosticsClient(info.Endpoint, ipcClient);
 
             ProcessInfo processInfo = null;
             try

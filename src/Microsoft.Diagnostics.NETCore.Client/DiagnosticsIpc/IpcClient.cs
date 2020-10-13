@@ -4,14 +4,24 @@
 
 using System;
 using System.IO;
-using System.Threading;
 
 namespace Microsoft.Diagnostics.NETCore.Client
 {
     internal class IpcClient
     {
+        private static readonly TimeSpan DefaultConnectTimeout = TimeSpan.FromSeconds(3);
+
         // The amount of time to wait for a stream to be available for consumption by the Connect method.
-        private static readonly TimeSpan ConnectTimeout = TimeSpan.FromSeconds(3);
+        private readonly TimeSpan _connectTimeout;
+
+        public IpcClient() : this(DefaultConnectTimeout)
+        {
+        }
+
+        public IpcClient(TimeSpan connectTimeout)
+        {
+            _connectTimeout = connectTimeout;
+        }
 
         /// <summary>
         /// Sends a single DiagnosticsIpc Message to the dotnet process with PID processId.
@@ -19,9 +29,9 @@ namespace Microsoft.Diagnostics.NETCore.Client
         /// <param name="endpoint">An endpoint that provides a diagnostics connection to a runtime instance.</param>
         /// <param name="message">The DiagnosticsIpc Message to be sent</param>
         /// <returns>The response DiagnosticsIpc Message from the dotnet process</returns>
-        public static IpcMessage SendMessage(IpcEndpoint endpoint, IpcMessage message)
+        public IpcMessage SendMessage(IpcEndpoint endpoint, IpcMessage message)
         {
-            using (var stream = endpoint.Connect(ConnectTimeout))
+            using (var stream = endpoint.Connect(_connectTimeout))
             {
                 Write(stream, message);
                 return Read(stream);
@@ -36,9 +46,9 @@ namespace Microsoft.Diagnostics.NETCore.Client
         /// <param name="message">The DiagnosticsIpc Message to be sent</param>
         /// <param name="response">out var for response message</param>
         /// <returns>The response DiagnosticsIpc Message from the dotnet process</returns>
-        public static Stream SendMessage(IpcEndpoint endpoint, IpcMessage message, out IpcMessage response)
+        public Stream SendMessage(IpcEndpoint endpoint, IpcMessage message, out IpcMessage response)
         {
-            var stream = endpoint.Connect(ConnectTimeout);
+            var stream = endpoint.Connect(_connectTimeout);
             Write(stream, message);
             response = Read(stream);
             return stream;

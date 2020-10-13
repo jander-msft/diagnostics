@@ -11,6 +11,7 @@ namespace Microsoft.Diagnostics.NETCore.Client
 {
     public class EventPipeSession : IDisposable
     {
+        private readonly IpcClient _client;
         private IEnumerable<EventPipeProvider> _providers;
         private bool _requestRundown;
         private int _circularBufferMB;
@@ -20,6 +21,7 @@ namespace Microsoft.Diagnostics.NETCore.Client
 
         internal EventPipeSession(IpcEndpoint endpoint, IEnumerable<EventPipeProvider> providers, bool requestRundown, int circularBufferMB)
         {
+            _client = new IpcClient();
             _endpoint = endpoint;
             _providers = providers;
             _requestRundown = requestRundown;
@@ -27,7 +29,7 @@ namespace Microsoft.Diagnostics.NETCore.Client
             
             var config = new EventPipeSessionConfiguration(circularBufferMB, EventPipeSerializationFormat.NetTrace, providers, requestRundown);
             var message = new IpcMessage(DiagnosticsServerCommandSet.EventPipe, (byte)EventPipeCommandId.CollectTracing2, config.SerializeV2());
-            EventStream = IpcClient.SendMessage(endpoint, message, out var response);
+            EventStream = _client.SendMessage(endpoint, message, out var response);
             switch ((DiagnosticsServerResponseId)response.Header.CommandId)
             {
                 case DiagnosticsServerResponseId.OK:
@@ -51,7 +53,7 @@ namespace Microsoft.Diagnostics.NETCore.Client
             Debug.Assert(_sessionId > 0);
 
             byte[] payload = BitConverter.GetBytes(_sessionId);
-            var response = IpcClient.SendMessage(_endpoint, new IpcMessage(DiagnosticsServerCommandSet.EventPipe, (byte)EventPipeCommandId.StopTracing, payload));
+            var response = _client.SendMessage(_endpoint, new IpcMessage(DiagnosticsServerCommandSet.EventPipe, (byte)EventPipeCommandId.StopTracing, payload));
 
             switch ((DiagnosticsServerResponseId)response.Header.CommandId)
             {

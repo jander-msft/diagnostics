@@ -19,6 +19,7 @@ namespace Microsoft.Diagnostics.NETCore.Client
     /// </summary>
     public sealed class DiagnosticsClient
     {
+        private readonly IpcClient _client;
         private readonly IpcEndpoint _endpoint;
 
         public DiagnosticsClient(int processId) :
@@ -26,8 +27,14 @@ namespace Microsoft.Diagnostics.NETCore.Client
         {
         }
 
-        internal DiagnosticsClient(IpcEndpoint endpoint)
+        internal DiagnosticsClient(IpcEndpoint endpoint) :
+            this(endpoint, new IpcClient())
         {
+        }
+
+        internal DiagnosticsClient(IpcEndpoint endpoint, IpcClient client)
+        {
+            _client = client;
             _endpoint = endpoint;
         }
 
@@ -93,7 +100,7 @@ namespace Microsoft.Diagnostics.NETCore.Client
 
             byte[] payload = SerializeCoreDump(dumpPath, dumpType, logDumpGeneration);
             IpcMessage message = new IpcMessage(DiagnosticsServerCommandSet.Dump, (byte)DumpCommandId.GenerateCoreDump, payload);
-            IpcMessage response = IpcClient.SendMessage(_endpoint, message);
+            IpcMessage response = _client.SendMessage(_endpoint, message);
             switch ((DiagnosticsServerResponseId)response.Header.CommandId)
             {
                 case DiagnosticsServerResponseId.Error:
@@ -130,7 +137,7 @@ namespace Microsoft.Diagnostics.NETCore.Client
 
             byte[] serializedConfiguration = SerializeProfilerAttach((uint)attachTimeout.TotalSeconds, profilerGuid, profilerPath, additionalData);
             var message = new IpcMessage(DiagnosticsServerCommandSet.Profiler, (byte)ProfilerCommandId.AttachProfiler, serializedConfiguration);
-            var response = IpcClient.SendMessage(_endpoint, message);
+            var response = _client.SendMessage(_endpoint, message);
             switch ((DiagnosticsServerResponseId)response.Header.CommandId)
             {
                 case DiagnosticsServerResponseId.Error:
@@ -150,7 +157,7 @@ namespace Microsoft.Diagnostics.NETCore.Client
         internal void ResumeRuntime()
         {
             IpcMessage message = new IpcMessage(DiagnosticsServerCommandSet.Process, (byte)ProcessCommandId.ResumeRuntime);
-            var response = IpcClient.SendMessage(_endpoint, message);
+            var response = _client.SendMessage(_endpoint, message);
             switch ((DiagnosticsServerResponseId)response.Header.CommandId)
             {
                 case DiagnosticsServerResponseId.Error:
@@ -170,7 +177,7 @@ namespace Microsoft.Diagnostics.NETCore.Client
         internal void ResumeRuntimeFallback()
         {
             IpcMessage message = new IpcMessage(DiagnosticsServerCommandSet.Server, (byte)DiagnosticServerCommandId.ResumeRuntime);
-            var response = IpcClient.SendMessage(_endpoint, message);
+            var response = _client.SendMessage(_endpoint, message);
             switch ((DiagnosticsServerResponseId)response.Header.CommandId)
             {
                 case DiagnosticsServerResponseId.Error:
@@ -186,7 +193,7 @@ namespace Microsoft.Diagnostics.NETCore.Client
         internal ProcessInfo GetProcessInfo()
         {
             IpcMessage message = new IpcMessage(DiagnosticsServerCommandSet.Process, (byte)ProcessCommandId.GetProcessInfo);
-            var response = IpcClient.SendMessage(_endpoint, message);
+            var response = _client.SendMessage(_endpoint, message);
             switch ((DiagnosticsServerResponseId)response.Header.CommandId)
             {
                 case DiagnosticsServerResponseId.Error:
@@ -202,7 +209,7 @@ namespace Microsoft.Diagnostics.NETCore.Client
         public Dictionary<string,string> GetProcessEnvironment()
         {
             var message = new IpcMessage(DiagnosticsServerCommandSet.Process, (byte)ProcessCommandId.GetProcessEnvironment);
-            Stream continuation = IpcClient.SendMessage(_endpoint, message, out IpcMessage response);
+            Stream continuation = _client.SendMessage(_endpoint, message, out IpcMessage response);
             switch ((DiagnosticsServerResponseId)response.Header.CommandId)
             {
                 case DiagnosticsServerResponseId.Error:
