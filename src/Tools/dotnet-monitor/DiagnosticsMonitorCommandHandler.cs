@@ -40,14 +40,14 @@ namespace Microsoft.Diagnostics.Tools.Monitor
             IWebHostBuilder builder = WebHost.CreateDefaultBuilder()
                 .ConfigureAppConfiguration((IConfigurationBuilder builder) =>
                 {
+                    //Note these are in precedence order.
                     ConfigureEndpointInfoSource(builder, reversedServerAddress);
                     if (metrics)
                     {
-                        //Note these are in precedence order.
                         ConfigureMetricsEndpoint(builder, metricUrls);
-                        builder.AddKeyPerFile(ConfigPath, optional: true);
-                        builder.AddEnvironmentVariables(ConfigPrefix);
                     }
+                    builder.AddKeyPerFile(ConfigPath, optional: true);
+                    builder.AddEnvironmentVariables(ConfigPrefix);
                 })
                 .ConfigureServices((WebHostBuilderContext context, IServiceCollection services) =>
                 {
