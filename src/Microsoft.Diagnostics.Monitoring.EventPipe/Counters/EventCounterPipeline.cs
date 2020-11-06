@@ -28,7 +28,7 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
                 _filter = new CounterFilter();
                 foreach (var counterGroup in settings.CounterGroups)
                 {
-                    _filter.AddFilter(counterGroup.ProviderName, counterGroup.CounterNames);
+                    _filter.AddFilter(counterGroup.ProviderName, 1000 * CounterIntervalSeconds, counterGroup.CounterNames);
                 }
             }
             else
@@ -39,8 +39,10 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
 
         internal override DiagnosticsEventPipeProcessor CreateProcessor()
         {
-            return new DiagnosticsEventPipeProcessor(PipeMode.Metrics, metricLoggers: _metricsLogger, metricIntervalSeconds: (int)Settings.RefreshInterval.TotalSeconds,
+            return new DiagnosticsEventPipeProcessor(PipeMode.Metrics, metricLoggers: _metricsLogger, metricIntervalSeconds: CounterIntervalSeconds,
                 metricFilter: _filter);
         }
+
+        private int CounterIntervalSeconds => (int)Settings.RefreshInterval.TotalSeconds;
     }
 }

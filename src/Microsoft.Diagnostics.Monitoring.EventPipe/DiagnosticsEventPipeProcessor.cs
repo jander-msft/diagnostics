@@ -363,24 +363,9 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
                 try
                 {
                     // Metrics
-                    if (traceEvent.EventName.Equals("EventCounters"))
+                    if (traceEvent.TryGetCounterPayload(_counterFilter, out IDictionary<string, object> payloadFields))
                     {
-                        IDictionary<string, object> payloadVal = (IDictionary<string, object>)(traceEvent.PayloadValue(0));
-                        IDictionary<string, object> payloadFields = (IDictionary<string, object>)(payloadVal["Payload"]);
-
-                        //Make sure we are part of the requested series. If multiple clients request metrics, all of them get the metrics.
-                        string series = payloadFields["Series"].ToString();
-                        if (GetInterval(series) != _metricIntervalSeconds * 1000)
-                        {
-                            return;
-                        }
-
                         string counterName = payloadFields["Name"].ToString();
-                        if (!_counterFilter.IsIncluded(traceEvent.ProviderName, counterName))
-                        {
-                            return;
-                        }
-
                         float intervalSec = (float)payloadFields["IntervalSec"];
                         string displayName = payloadFields["DisplayName"].ToString();
                         string displayUnits = payloadFields["DisplayUnits"].ToString();
