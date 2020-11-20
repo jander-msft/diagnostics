@@ -34,6 +34,7 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.UnitTests
                     nameof(ValueTypeEvent<int>.Value)),
                 BinaryOperator.GreaterThanOrEqual,
                 "5");
+
             var evaluator = new ConditionEvaluator(
                 CounterFilter.AllCounters,
                 condition,
@@ -42,6 +43,7 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.UnitTests
             AssertResults(evaluator, events, expectedResults);
 
             // Modify events to test null payload
+            SetValueNullable(events[0], null);
             SetValueNullable(events[6], null);
             expectedResults[6] = false;
             SetValueNullable(events[7], null);
@@ -76,6 +78,7 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.UnitTests
                     nameof(ValueTypeEvent<int>.Value)),
                 BinaryOperator.GreaterThanOrEqual,
                 "5");
+
             var evaluator = new ConditionEvaluator(
                 CounterFilter.AllCounters,
                 condition,
@@ -83,7 +86,8 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.UnitTests
 
             AssertResults(evaluator, events, expectedResults);
 
-            // Modify events to test null payload
+            // Modify events to test null properties
+            SetValueNullable(events[0], null);
             SetValueNullable(events[6], null);
             expectedResults[6] = false;
             SetValueNullable(events[7], null);
@@ -96,6 +100,7 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.UnitTests
                     nameof(ValueTypeEvent<int>.ValueNullable)),
                 BinaryOperator.GreaterThanOrEqual,
                 "5");
+
             evaluator = new ConditionEvaluator(
                 CounterFilter.AllCounters,
                 condition,
@@ -121,6 +126,7 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.UnitTests
                 ),
                 BinaryOperator.GreaterThan,
                 "3");
+
             var evaluator = new ConditionEvaluator(
                 CounterFilter.AllCounters,
                 condition,
@@ -138,6 +144,7 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.UnitTests
                 ),
                 BinaryOperator.GreaterThan,
                 "3");
+
             evaluator = new ConditionEvaluator(
                 CounterFilter.AllCounters,
                 condition,
