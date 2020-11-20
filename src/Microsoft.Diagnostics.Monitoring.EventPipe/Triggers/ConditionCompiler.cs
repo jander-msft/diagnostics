@@ -6,6 +6,7 @@ using Microsoft.Diagnostics.Monitoring.EventPipe.Triggers.Expressions;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
 
@@ -13,8 +14,22 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.Triggers
 {
     internal sealed class ConditionCompiler
     {
+        private const string HexPrefix = "0x";
+
         private static readonly Type EnumerableTraceEventDataType =
             typeof(IEnumerable<>).MakeGenericType(typeof(TraceEventData));
+
+        private static readonly Type[] IntegerTypes = new[]
+        {
+            typeof(sbyte),
+            typeof(byte),
+            typeof(short),
+            typeof(ushort),
+            typeof(int),
+            typeof(uint),
+            typeof(long),
+            typeof(ulong)
+        };
 
         private static readonly MethodInfo WhereTraceEventDataMethod =
             EnumerableMethods.Where().MakeGenericMethod(typeof(TraceEventData));
@@ -348,18 +363,61 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.Triggers
 
             private static ConstantExpression ConvertConstant(string value, Type targetType)
             {
-                Type underlyingType = Nullable.GetUnderlyingType(targetType);
-                if (null != underlyingType)
+                // For nullable types, convert to the underlying type first. The Expression infrastructure
+                // allows for creation of constants with automatic lifting to the nullable version of the type.
+                Type conversionType = Nullable.GetUnderlyingType(targetType) ?? targetType;
+
+                if (null != value && value.StartsWith(HexPrefix) &&
+                    (conversionType.IsEnum || IntegerTypes.Contains(conversionType)))
                 {
-                    // Convert to the underlying type but create expression with the nullable type.
-                    // The Expression infrastructure allows for creation of constants with automatic
-                    // lifting to the nullable version of their types.
-                    return Expression.Constant(Convert.ChangeType(value, underlyingType, CultureInfo.InvariantCulture), targetType);
+                    // If type is an enum, need to parse to the underlying value type
+                    // before converting to a enum.
+                    Type parseType = conversionType.IsEnum ?
+                        Enum.GetUnderlyingType(conversionType) :
+                        conversionType;
+
+                    // All integer types have a Parse(string, NumberStyles, and IFormatProvider) method
+                    MethodInfo parseMethod = parseType.GetMethod(
+                        "Parse",
+                        new Type[]
+                        {
+                            typeof(string),
+                            typeof(NumberStyles),
+                            typeof(IFormatProvider)
+                        });
+
+                    object parsedValue = parseMethod.Invoke(
+                        null,
+                        new object[]
+                        {
+                            value.Substring(HexPrefix.Length),
+                            NumberStyles.AllowHexSpecifier,
+                            CultureInfo.InvariantCulture
+                        });
+
+                    if (conversionType.IsEnum)
+                    {
+                        return Expression.Constant(
+                            Enum.ToObject(conversionType, parsedValue),
+                            targetType);
+                    }
+                    else
+                    {
+                        return Expression.Constant(
+                            parsedValue,
+                            targetType);
+                    }
                 }
-                else
+                else if (conversionType.IsEnum)
                 {
-                    return Expression.Constant(Convert.ChangeType(value, targetType, CultureInfo.InvariantCulture), targetType);
+                    return Expression.Constant(
+                        Enum.Parse(conversionType, value, ignoreCase: true),
+                        targetType);
                 }
+
+                return Expression.Constant(
+                    Convert.ChangeType(value, conversionType, CultureInfo.InvariantCulture),
+                    targetType);
             }
 
             private Expression VisitAsExpression(ExpressionNode node)
