@@ -125,7 +125,7 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.UnitTests
         private Action _action;
 
         public ValueTypeEvent()
-            : base(0, 0, null, Guid.NewGuid(), 0, null, Guid.NewGuid(), null)
+            : base(0, 0, nameof(ValueTypeEvent<int>), Guid.NewGuid(), 0, null, Guid.NewGuid(), nameof(ValueTypeEvent<int>) + "Provider")
         {
         }
 

@@ -3,52 +3,58 @@
 // See the LICENSE file in the project root for more information.
 
 using Microsoft.Diagnostics.Monitoring.EventPipe.Triggers.Expressions;
-using Microsoft.Diagnostics.Tracing;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 
 namespace Microsoft.Diagnostics.Monitoring.EventPipe.Triggers
 {
-    internal class ConditionEvaluator
+    internal class ConditionEvaluator : EventEvaluator
     {
-        private readonly ConditionExpression _conditionExpr;
-        private readonly CounterFilter _filter;
+        private readonly ConditionExpression _expression;
         private readonly int _maxItemCount;
 
         private ConditionDelegate _condition;
         private Queue<TraceEventData> _items = new Queue<TraceEventData>();
 
-        public ConditionEvaluator(CounterFilter filter, ConditionExpression conditionExpr, int maxItemCount)
+        public ConditionEvaluator(ConditionExpression expression, int maxItemCount, string providerName, string eventName)
+            : this(expression, maxItemCount, providerName, eventName, null, 0)
         {
-            _conditionExpr = conditionExpr ?? throw new ArgumentNullException(nameof(conditionExpr));
-            _filter = filter ?? throw new ArgumentNullException(nameof(filter));
+        }
+
+        public ConditionEvaluator(ConditionExpression expression, int maxItemCount, string providerName, string counterName, int counterIntervalMSec)
+            : this(expression, maxItemCount, providerName, "EventCounters", counterName, counterIntervalMSec)
+        {
+        }
+
+        public ConditionEvaluator(ConditionExpression expression, int maxItemCount, string providerName, string eventName, string counterName, int counterIntervalMSec)
+            : base(providerName, eventName, counterName, counterIntervalMSec)
+        {
+            _expression = expression ?? throw new ArgumentNullException(nameof(expression));
             _maxItemCount = maxItemCount;
         }
 
-        public bool Evaluate(TraceEvent value)
+        public override bool EvaluateCore(TraceEventData data)
         {
-            var item = TraceEventData.Create(value,  _filter);
-
-            _items.Enqueue(item);
+            _items.Enqueue(data);
             if (_items.Count > _maxItemCount)
             {
                 _items.Dequeue();
             }
 
-            if (null == _condition && !TryCompile(item, out _condition))
+            if (null == _condition && !TryCompile(data, out _condition))
             {
                 return false;
             }
 
-            return _condition(_items, item);
+            return _condition(_items, data);
         }
 
         private bool TryCompile(TraceEventData sample, out ConditionDelegate condition)
         {
             try
             {
-                condition = ConditionCompiler.Compile(_conditionExpr, sample);
+                condition = ConditionCompiler.Compile(_expression, sample);
 
                 return true;
             }

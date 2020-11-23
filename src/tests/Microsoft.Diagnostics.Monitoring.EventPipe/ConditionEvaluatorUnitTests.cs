@@ -36,9 +36,10 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.UnitTests
                 "5");
 
             var evaluator = new ConditionEvaluator(
-                CounterFilter.AllCounters,
                 condition,
-                1);
+                1,
+                events[0].ProviderName,
+                events[0].EventName);
 
             AssertResults(evaluator, events, expectedResults);
 
@@ -57,9 +58,10 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.UnitTests
                 BinaryOperator.GreaterThanOrEqual,
                 "5");
             evaluator = new ConditionEvaluator(
-                CounterFilter.AllCounters,
                 condition,
-                1);
+                1,
+                events[0].ProviderName,
+                events[0].EventName);
 
             AssertResults(evaluator, events, expectedResults);
         }
@@ -80,9 +82,10 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.UnitTests
                 "5");
 
             var evaluator = new ConditionEvaluator(
-                CounterFilter.AllCounters,
                 condition,
-                1);
+                1,
+                events[0].ProviderName,
+                events[0].EventName);
 
             AssertResults(evaluator, events, expectedResults);
 
@@ -102,9 +105,10 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.UnitTests
                 "5");
 
             evaluator = new ConditionEvaluator(
-                CounterFilter.AllCounters,
                 condition,
-                1);
+                1,
+                events[0].ProviderName,
+                events[0].EventName);
 
             AssertResults(evaluator, events, expectedResults);
         }
@@ -128,9 +132,10 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.UnitTests
                 "3");
 
             var evaluator = new ConditionEvaluator(
-                CounterFilter.AllCounters,
                 condition,
-                10);
+                10,
+                events[0].ProviderName,
+                events[0].EventName);
 
             AssertResults(evaluator, events, expectedResults);
 
@@ -146,9 +151,10 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.UnitTests
                 "3");
 
             evaluator = new ConditionEvaluator(
-                CounterFilter.AllCounters,
                 condition,
-                10);
+                10,
+                events[0].ProviderName,
+                events[0].EventName);
 
             AssertResults(evaluator, events, expectedResults);
         }
