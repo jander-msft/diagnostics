@@ -34,7 +34,7 @@ namespace Microsoft.Diagnostics.Tools.Monitor
                     _source = new ClientEndpointInfoSource();
                     break;
                 case DiagnosticPortConnectionMode.Listen:
-                    _source = new ServerEndpointInfoSource(_portOptions.EndpointName);
+                    _source = new ServerEndpointInfoSource(_portOptions.EndpointName, Callback);
                     break;
                 default:
                     throw new InvalidOperationException($"Unhandled connection mode: {_portOptions.ConnectionMode}");
@@ -105,6 +105,13 @@ namespace Microsoft.Diagnostics.Tools.Monitor
             {
                 source.Start(_portOptions.MaxConnections.GetValueOrDefault(ReversedDiagnosticsServer.MaxAllowedConnections));
             }
+        }
+
+        private readonly IList<Pipeline> _pipelines = new List<Pipeline>();
+
+        private Task Callback(IpcEndpointInfo info, CancellationToken token)
+        {
+            var pipeline = new 
         }
     }
 }

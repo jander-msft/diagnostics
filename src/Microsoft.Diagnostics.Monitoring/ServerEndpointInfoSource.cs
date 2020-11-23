@@ -22,6 +22,7 @@ namespace Microsoft.Diagnostics.Monitoring
         // this time, it will be pruned from the list.
         private static readonly TimeSpan PruneWaitForConnectionTimeout = TimeSpan.FromMilliseconds(250);
 
+        private readonly Func<IpcEndpointInfo, CancellationToken, Task> _callback;
         private readonly CancellationTokenSource _cancellation = new CancellationTokenSource();
         private readonly IList<EndpointInfo> _endpointInfos = new List<EndpointInfo>();
         private readonly SemaphoreSlim _endpointInfosSemaphore = new SemaphoreSlim(1);
@@ -40,8 +41,9 @@ namespace Microsoft.Diagnostics.Monitoring
         /// On Windows, this can be a full pipe path or the name without the "\\.\pipe\" prefix.
         /// On all other systems, this must be the full file path of the socket.
         /// </param>
-        public ServerEndpointInfoSource(string transportPath)
+        public ServerEndpointInfoSource(string transportPath, Func<IpcEndpointInfo, CancellationToken, Task> callback)
         {
+            _callback = callback;
             _transportPath = transportPath;
         }
 
@@ -194,6 +196,8 @@ namespace Microsoft.Diagnostics.Monitoring
         {
             try
             {
+                await _callback(info, token);
+
                 // Send ResumeRuntime message for runtime instances that connect to the server. This will allow
                 // those instances that are configured to pause on start to resume after the diagnostics
                 // connection has been made. Instances that are not configured to pause on startup will ignore
