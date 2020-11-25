@@ -3,6 +3,7 @@
 // See the LICENSE file in the project root for more information.
 
 using Microsoft.Diagnostics.Monitoring;
+using Microsoft.Diagnostics.Monitoring.EventPipe.Triggers;
 using Microsoft.Diagnostics.NETCore.Client;
 using Microsoft.Extensions.Options;
 using System;
@@ -34,7 +35,7 @@ namespace Microsoft.Diagnostics.Tools.Monitor
                     _source = new ClientEndpointInfoSource();
                     break;
                 case DiagnosticPortConnectionMode.Listen:
-                    _source = new ServerEndpointInfoSource(_portOptions.EndpointName);
+                    _source = new ServerEndpointInfoSource(_portOptions.EndpointName, Callback);
                     break;
                 default:
                     throw new InvalidOperationException($"Unhandled connection mode: {_portOptions.ConnectionMode}");
@@ -105,6 +106,19 @@ namespace Microsoft.Diagnostics.Tools.Monitor
             {
                 source.Start(_portOptions.MaxConnections.GetValueOrDefault(ReversedDiagnosticsServer.MaxAllowedConnections));
             }
+        }
+
+        private IList<Pipeline> _pipelines = new List<Pipeline>();
+
+        private Task Callback(IpcEndpointInfo info, CancellationToken token)
+        {
+            Pipeline pipeline = new TriggerRuleEngine(new HttpRequestInRule(), new DiagnosticsClient(info.Endpoint));
+
+            _pipelines.Add(pipeline);
+
+            pipeline.RunAsync(CancellationToken.None);
+
+            return Task.CompletedTask;
         }
     }
 }

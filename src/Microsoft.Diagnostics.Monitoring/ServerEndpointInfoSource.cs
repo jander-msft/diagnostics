@@ -31,6 +31,8 @@ namespace Microsoft.Diagnostics.Monitoring
         private bool _disposed = false;
         private ReversedDiagnosticsServer _server;
 
+        private readonly Func<IpcEndpointInfo, CancellationToken, Task> _callback;
+
         /// <summary>
         /// Constructs a <see cref="ServerEndpointInfoSource"/> that aggreates diagnostic endpoints
         /// from a reversed diagnostics server at path specified by <paramref name="transportPath"/>.
@@ -40,8 +42,9 @@ namespace Microsoft.Diagnostics.Monitoring
         /// On Windows, this can be a full pipe path or the name without the "\\.\pipe\" prefix.
         /// On all other systems, this must be the full file path of the socket.
         /// </param>
-        public ServerEndpointInfoSource(string transportPath)
+        public ServerEndpointInfoSource(string transportPath, Func<IpcEndpointInfo, CancellationToken, Task> callback)
         {
+            _callback = callback;
             _transportPath = transportPath;
         }
 
@@ -194,6 +197,8 @@ namespace Microsoft.Diagnostics.Monitoring
         {
             try
             {
+                await _callback(info, token);
+
                 // Send ResumeRuntime message for runtime instances that connect to the server. This will allow
                 // those instances that are configured to pause on start to resume after the diagnostics
                 // connection has been made. Instances that are not configured to pause on startup will ignore

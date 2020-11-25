@@ -1,6 +1,4 @@
-﻿using Microsoft.Diagnostics.NETCore.Client;
-using Microsoft.Diagnostics.Tracing;
-using System.Collections.Generic;
+﻿using Microsoft.Diagnostics.Tracing;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -15,8 +13,8 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.Triggers
 
     internal interface ITriggerRuleContext
     {
-        Task SetProvidersAsync(IEnumerable<EventPipeProvider> providers, CancellationToken token);
+        Task SetConfigurationAsync(MonitoringSourceConfiguration configuration, CancellationToken token);
 
-        Task EgressEventsAsync(string providerName, CancellationToken token);
+        Task NotifyTrigger(string triggerName, CancellationToken token);
     }
 }
