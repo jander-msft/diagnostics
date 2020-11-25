@@ -10,10 +10,13 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.Triggers
     internal class HttpRequestInRule : ITriggerRule
     {
         private ITriggerRuleContext _context;
+        private IDictionary<string, DateTime> _dueTime;
 
         public async Task InitializeAsync(ITriggerRuleContext context, CancellationToken token)
         {
             _context = context ?? throw new ArgumentNullException(nameof(context));
+
+            _dueTime = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
 
             await context.SetConfigurationAsync(new HttpRequestSourceConfiguration(), token);
         }
@@ -37,30 +40,29 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.Triggers
 
         private void HttpRequestInStart(TraceEvent traceEvent)
         {
-            Debug.WriteLine("Start Event");
-            foreach (string payloadName in traceEvent.PayloadNames)
-            {
-                if ("Arguments" == payloadName)
-                {
-                    IDictionary<string, string> arguments = traceEvent.GetDiagnosticSourceTraceEventArguments();
-                    foreach (KeyValuePair<string, string> keyvalue in arguments)
-                    {
-                        Debug.WriteLine($"Argument: {keyvalue.Key} = {keyvalue.Value}");
-                    }
-                }
-                else
-                {
-                    Debug.WriteLine($"Payload: {payloadName} = {traceEvent.PayloadByName(payloadName)}");
-                }
-            }
+            var arguments = traceEvent.GetDiagnosticSourceTraceEventArguments();
+            string activityId = arguments["ActivityId"];
+
+            Debug.WriteLine($"Adding HTTP activity {activityId} to map.");
+
+            _dueTime.Add(arguments["ActivityId"], traceEvent.TimeStamp.AddSeconds(1));
         }
 
         private void HttpRequestInStop(TraceEvent traceEvent)
         {
-            Debug.WriteLine("End Event");
-            foreach (string payloadName in traceEvent.PayloadNames)
+            var arguments = traceEvent.GetDiagnosticSourceTraceEventArguments();
+            string activityId = arguments["ActivityId"];
+
+            if (_dueTime.TryGetValue(activityId, out DateTime dueTime))
             {
-                Debug.WriteLine($"Payload: {payloadName} = {traceEvent.PayloadByName(payloadName)}");
+                Debug.WriteLine($"Removing HTTP activity {activityId} from map.");
+
+                _dueTime.Remove(activityId);
+
+                if (dueTime <= traceEvent.TimeStamp)
+                {
+                    _context.NotifyTrigger("Trigger!", CancellationToken.None);
+                }
             }
         }
     }

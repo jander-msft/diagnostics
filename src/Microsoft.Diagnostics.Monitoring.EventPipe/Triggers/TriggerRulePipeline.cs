@@ -1,18 +1,19 @@
 ﻿using Microsoft.Diagnostics.NETCore.Client;
 using Microsoft.Diagnostics.Tracing;
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace Microsoft.Diagnostics.Monitoring.EventPipe.Triggers
 {
-    internal class TriggerRuleEngine : Pipeline
+    internal class TriggerRulePipeline : Pipeline
     {
         private readonly DiagnosticsClient _client;
         private readonly ITriggerRule _rule;
 
-        public TriggerRuleEngine(ITriggerRule rule, DiagnosticsClient client)
+        public TriggerRulePipeline(ITriggerRule rule, DiagnosticsClient client)
         {
             _client = client ?? throw new ArgumentNullException(nameof(client));
             _rule = rule ?? throw new ArgumentNullException(nameof(rule));
@@ -47,6 +48,7 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.Triggers
         {
             public Task NotifyTrigger(string triggerName, CancellationToken token)
             {
+                Debug.WriteLine($"Trigger: {triggerName}");
                 return Task.CompletedTask;
             }
 
