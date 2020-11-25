@@ -1,5 +1,6 @@
 ﻿using Microsoft.Diagnostics.Tracing;
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
@@ -39,10 +40,17 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.Triggers
             Debug.WriteLine("Start Event");
             foreach (string payloadName in traceEvent.PayloadNames)
             {
-                Debug.WriteLine($"Payload: {payloadName} = {traceEvent.PayloadByName(payloadName)}");
                 if ("Arguments" == payloadName)
                 {
-
+                    IDictionary<string, string> arguments = traceEvent.GetDiagnosticSourceTraceEventArguments();
+                    foreach (KeyValuePair<string, string> keyvalue in arguments)
+                    {
+                        Debug.WriteLine($"Argument: {keyvalue.Key} = {keyvalue.Value}");
+                    }
+                }
+                else
+                {
+                    Debug.WriteLine($"Payload: {payloadName} = {traceEvent.PayloadByName(payloadName)}");
                 }
             }
         }
