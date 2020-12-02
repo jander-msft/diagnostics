@@ -112,7 +112,13 @@ namespace Microsoft.Diagnostics.Tools.Monitor
 
         private Task Callback(IpcEndpointInfo info, CancellationToken token)
         {
-            Pipeline pipeline = new TriggerRulePipeline(new HttpRequestInRule(), new DiagnosticsClient(info.Endpoint));
+            TriggerRulePipelineSettings settings = new TriggerRulePipelineSettings()
+            {
+                Duration = Timeout.InfiniteTimeSpan,
+                RuleFactory = new HttpRequestInRuleFactory()
+            };
+
+            Pipeline pipeline = new TriggerRulePipeline(new DiagnosticsClient(info.Endpoint), settings);
 
             _pipelines.Add(pipeline);
 

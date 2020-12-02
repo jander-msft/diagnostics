@@ -2,59 +2,45 @@
 using Microsoft.Diagnostics.Tracing;
 using System;
 using System.Diagnostics;
-using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace Microsoft.Diagnostics.Monitoring.EventPipe.Triggers
 {
-    internal class TriggerRulePipeline : Pipeline
+    internal sealed class TriggerRulePipeline : EventSourcePipeline<EventSourcePipelineSettings>
     {
-        private readonly DiagnosticsClient _client;
+        private readonly ITriggerRuleContext _context;
         private readonly ITriggerRule _rule;
 
-        public TriggerRulePipeline(ITriggerRule rule, DiagnosticsClient client)
+        public TriggerRulePipeline(DiagnosticsClient client, TriggerRulePipelineSettings settings)
+            : base(client, settings)
         {
-            _client = client ?? throw new ArgumentNullException(nameof(client));
-            _rule = rule ?? throw new ArgumentNullException(nameof(rule));
+            if (null == settings.RuleFactory)
+            {
+                throw new ArgumentException(null, nameof(settings.RuleFactory));
+            }
+
+            _context = new TriggerRuleContext();
+            _rule = settings.RuleFactory.Create(_context);
         }
 
-        protected override Task OnRun(CancellationToken token)
+        protected override MonitoringSourceConfiguration CreateConfiguration()
         {
-            return Task.Run(async () =>
-            {
-                var context = new TriggerRuleContext();
+            return _rule.CreateConfiguration();
+        }
 
-                await _rule.InitializeAsync(context, token);
+        protected override Task OnEventSourceAvailable(EventPipeEventSource eventSource, Func<Task> stopSessionAsync, CancellationToken token)
+        {
+            _rule.RegisterCallbacks(eventSource);
 
-                TaskCompletionSource<Stream> eventStreamSource =
-                    new TaskCompletionSource<Stream>(TaskCreationOptions.RunContinuationsAsynchronously);
-
-                var configuration = context.Configuration;
-                using EventPipeSession session = _client.StartEventPipeSession(
-                    configuration.GetProviders(),
-                    configuration.RequestRundown,
-                    configuration.BufferSizeInMB);
-
-                EventPipeEventSource eventSource = new EventPipeEventSource(session.EventStream);
-
-                _rule.SetupCallbacks(eventSource);
-
-                eventSource.Process();
-            }, token);
+            return Task.CompletedTask;
         }
 
         private class TriggerRuleContext : ITriggerRuleContext
         {
-            public Task NotifyTrigger(string triggerName, CancellationToken token)
+            public Task NotifyTriggerAsync(string triggerName, CancellationToken token)
             {
                 Debug.WriteLine($"Trigger: {triggerName}");
-                return Task.CompletedTask;
-            }
-
-            public Task SetConfigurationAsync(MonitoringSourceConfiguration configuration, CancellationToken token)
-            {
-                Configuration = configuration;
                 return Task.CompletedTask;
             }
 

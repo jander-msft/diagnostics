@@ -6,15 +6,15 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.Triggers
 {
     internal interface ITriggerRule
     {
-        Task InitializeAsync(ITriggerRuleContext context, CancellationToken token);
+        MonitoringSourceConfiguration CreateConfiguration();
 
-        void SetupCallbacks(TraceEventSource eventSource);
+        void RegisterCallbacks(TraceEventSource eventSource);
+
+        Task StopAsync(CancellationToken token);
     }
 
     internal interface ITriggerRuleContext
     {
-        Task SetConfigurationAsync(MonitoringSourceConfiguration configuration, CancellationToken token);
-
-        Task NotifyTrigger(string triggerName, CancellationToken token);
+        Task NotifyTriggerAsync(string triggerName, CancellationToken token);
     }
 }

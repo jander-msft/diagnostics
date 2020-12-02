@@ -32,11 +32,11 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
                 onEventSourceAvailable: OnEventSourceAvailable);
         }
 
-        protected override Task OnRun(CancellationToken token)
+        protected override async Task OnRun(CancellationToken token)
         {
             try
             {
-                return _processor.Value.Process(Client, Settings.Duration, token);
+                await _processor.Value.Process(Client, Settings.Duration, token);
             }
             catch (InvalidOperationException e)
             {
