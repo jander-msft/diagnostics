@@ -4,8 +4,11 @@
 
 namespace Microsoft.Diagnostics.Monitoring.EventPipe
 {
-    internal interface ITriggerRuleFactory
+    internal sealed class HttpRequestInRuleFactory : ITriggerRuleFactory
     {
-        ITriggerRule Create(ITriggerRuleContext context);
+        public ITriggerRule Create(ITriggerRuleContext context)
+        {
+            return new HttpRequestInRule(context);
+        }
     }
 }
