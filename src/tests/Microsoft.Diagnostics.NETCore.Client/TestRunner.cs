@@ -19,7 +19,6 @@ namespace Microsoft.Diagnostics.NETCore.Client
         private Process testProcess;
         private ProcessStartInfo startInfo;
         private ITestOutputHelper outputHelper;
-        private CancellationTokenSource cts;
 
         public TestRunner(string testExePath, ITestOutputHelper _outputHelper = null,
             bool redirectError = false, bool redirectInput = false)
@@ -52,8 +51,6 @@ namespace Microsoft.Diagnostics.NETCore.Client
             {
                 testProcess?.Dispose();
             }
-
-            cts.Dispose();
         }
 
         public void AddEnvVar(string key, string value)
@@ -84,7 +81,7 @@ namespace Microsoft.Diagnostics.NETCore.Client
                 outputHelper.WriteLine($"Process " + startInfo.FileName + " came back as exited");
             }
 
-            cts = new CancellationTokenSource(testProcessTimeout);
+            using var cts = new CancellationTokenSource(testProcessTimeout);
             cts.Token.Register(() => testProcess.Kill());
 
             if (outputHelper != null)
