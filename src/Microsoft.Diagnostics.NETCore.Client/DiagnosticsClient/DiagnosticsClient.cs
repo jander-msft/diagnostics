@@ -150,41 +150,20 @@ namespace Microsoft.Diagnostics.NETCore.Client
         /// <param name="additionalData">Additional data to be passed to the profiler</param>
         public void AttachProfiler(TimeSpan attachTimeout, Guid profilerGuid, string profilerPath, byte[] additionalData = null)
         {
-            if (profilerGuid == null || profilerGuid == Guid.Empty)
-            {
-                throw new ArgumentException($"{nameof(profilerGuid)} must be a valid Guid");
-            }
-
-            if (String.IsNullOrEmpty(profilerPath))
-            {
-                throw new ArgumentException($"{nameof(profilerPath)} must be non-null");
-            }
-
-            byte[] serializedConfiguration = SerializePayload((uint)attachTimeout.TotalSeconds, profilerGuid, profilerPath, additionalData);
-            var message = new IpcMessage(DiagnosticsServerCommandSet.Profiler, (byte)ProfilerCommandId.AttachProfiler, serializedConfiguration);
-            IpcMessage response = IpcClient.SendMessage(_endpoint, message);
-            switch ((DiagnosticsServerResponseId)response.Header.CommandId)
-            {
-                case DiagnosticsServerResponseId.Error:
-                    uint hr = BitConverter.ToUInt32(response.Payload, 0);
-                    if (hr == (uint)DiagnosticsIpcError.UnknownCommand)
-                    {
-                        throw new UnsupportedCommandException("The target runtime does not support profiler attach");
-                    }
-                    if (hr == (uint)DiagnosticsIpcError.ProfilerAlreadyActive)
-                    {
-                        throw new ProfilerAlreadyActiveException("The request to attach a profiler was denied because a profiler is already loaded");
-                    }
-                    throw new ServerErrorException($"Profiler attach failed (HRESULT: 0x{hr:X8})");
-                case DiagnosticsServerResponseId.OK:
-                    return;
-                default:
-                    throw new ServerErrorException($"Profiler attach failed - server responded with unknown command");
-            }
+            IpcMessage request = CreateAttachProfilerMessage(attachTimeout, profilerGuid, profilerPath, additionalData);
+            IpcMessage response = IpcClient.SendMessage(_endpoint, request);
+            ValidateResponseMessage(response, nameof(AttachProfiler));
 
             // The call to set up the pipe and send the message operates on a different timeout than attachTimeout, which is for the runtime.
             // We should eventually have a configurable timeout for the message passing, potentially either separately from the 
             // runtime timeout or respect attachTimeout as one total duration.
+        }
+
+        internal async Task AttachProfilerAsync(TimeSpan attachTimeout, Guid profilerGuid, string profilerPath, byte[] additionalData, CancellationToken token)
+        {
+            IpcMessage request = CreateAttachProfilerMessage(attachTimeout, profilerGuid, profilerPath, additionalData);
+            IpcMessage response = await IpcClient.SendMessageAsync(_endpoint, request, token).ConfigureAwait(false);
+            ValidateResponseMessage(response, nameof(AttachProfilerAsync));
         }
 
         /// <summary>
@@ -195,38 +174,16 @@ namespace Microsoft.Diagnostics.NETCore.Client
         /// <param name="profilerPath">Path to the profiler to be attached</param>
         public void SetStartupProfiler(Guid profilerGuid, string profilerPath)
         {
-            if (profilerGuid == null || profilerGuid == Guid.Empty)
-            {
-                throw new ArgumentException($"{nameof(profilerGuid)} must be a valid Guid");
-            }
+            IpcMessage request = CreateSetStartupProfilerMessage(profilerGuid, profilerPath);
+            IpcMessage response = IpcClient.SendMessage(_endpoint, request);
+            ValidateResponseMessage(response, nameof(SetStartupProfiler), ValidateResponseOptions.InvalidArgumentIsRequiresSuspension);
+        }
 
-            if (String.IsNullOrEmpty(profilerPath))
-            {
-                throw new ArgumentException($"{nameof(profilerPath)} must be non-null");
-            }
-
-            byte[] serializedConfiguration = SerializePayload(profilerGuid, profilerPath);
-            var message = new IpcMessage(DiagnosticsServerCommandSet.Profiler, (byte)ProfilerCommandId.StartupProfiler, serializedConfiguration);
-            var response = IpcClient.SendMessage(_endpoint, message);
-            switch ((DiagnosticsServerResponseId)response.Header.CommandId)
-            {
-                case DiagnosticsServerResponseId.Error:
-                    uint hr = BitConverter.ToUInt32(response.Payload, 0);
-                    if (hr == (uint)DiagnosticsIpcError.UnknownCommand)
-                    {
-                        throw new UnsupportedCommandException("The target runtime does not support the ProfilerStartup command.");
-                    }
-                    else if (hr == (uint)DiagnosticsIpcError.InvalidArgument)
-                    {
-                        throw new ServerErrorException("The runtime must be suspended to issue the SetStartupProfiler command.");
-                    }
-
-                    throw new ServerErrorException($"Profiler startup failed (HRESULT: 0x{hr:X8})");
-                case DiagnosticsServerResponseId.OK:
-                    return;
-                default:
-                    throw new ServerErrorException($"Profiler startup failed - server responded with unknown command");
-            }
+        internal async Task SetStartupProfilerAsync(Guid profilerGuid, string profilerPath, CancellationToken token)
+        {
+            IpcMessage request = CreateSetStartupProfilerMessage(profilerGuid, profilerPath);
+            IpcMessage response = await IpcClient.SendMessageAsync(_endpoint, request, token).ConfigureAwait(false);
+            ValidateResponseMessage(response, nameof(SetStartupProfiler), ValidateResponseOptions.InvalidArgumentIsRequiresSuspension);
         }
 
         /// <summary>
@@ -239,10 +196,10 @@ namespace Microsoft.Diagnostics.NETCore.Client
             ValidateResponseMessage(response, nameof(ResumeRuntime));
         }
 
-        internal async Task ResumeRuntimeAsync(CancellationToken cancellationToken)
+        internal async Task ResumeRuntimeAsync(CancellationToken token)
         {
             IpcMessage request = CreateResumeRuntimeMessage();
-            IpcMessage response = await IpcClient.SendMessageAsync(_endpoint, request, cancellationToken).ConfigureAwait(false);
+            IpcMessage response = await IpcClient.SendMessageAsync(_endpoint, request, token).ConfigureAwait(false);
             ValidateResponseMessage(response, nameof(ResumeRuntimeAsync));
         }
 
@@ -253,29 +210,16 @@ namespace Microsoft.Diagnostics.NETCore.Client
         /// <param name="value">The value of the environment variable to set.</param>
         public void SetEnvironmentVariable(string name, string value)
         {
-            if (String.IsNullOrEmpty(name))
-            {
-                throw new ArgumentException($"{nameof(name)} must be non-null.");
-            }
+            IpcMessage request = CreateSetEnvironmentVariableMessage(name, value);
+            IpcMessage response = IpcClient.SendMessage(_endpoint, request);
+            ValidateResponseMessage(response, nameof(SetEnvironmentVariable));
+        }
 
-            byte[] serializedConfiguration = SerializePayload(name, value);
-            var message = new IpcMessage(DiagnosticsServerCommandSet.Process, (byte)ProcessCommandId.SetEnvironmentVariable, serializedConfiguration);
-            var response = IpcClient.SendMessage(_endpoint, message);
-            switch ((DiagnosticsServerResponseId)response.Header.CommandId)
-            {
-                case DiagnosticsServerResponseId.Error:
-                    uint hr = BitConverter.ToUInt32(response.Payload, 0);
-                    if (hr == (uint)DiagnosticsIpcError.UnknownCommand)
-                    {
-                        throw new UnsupportedCommandException("The target runtime does not support the SetEnvironmentVariable command.");
-                    }
-
-                    throw new ServerErrorException($"SetEnvironmentVariable failed (HRESULT: 0x{hr:X8})");
-                case DiagnosticsServerResponseId.OK:
-                    return;
-                default:
-                    throw new ServerErrorException($"SetEnvironmentVariable failed - server responded with unknown command");
-            }
+        internal async Task SetEnvironmentVariableAsync(string name, string value, CancellationToken token)
+        {
+            IpcMessage request = CreateSetEnvironmentVariableMessage(name, value);
+            IpcMessage response = await IpcClient.SendMessageAsync(_endpoint, request, token).ConfigureAwait(false);
+            ValidateResponseMessage(response, nameof(SetEnvironmentVariableAsync));
         }
 
         /// <summary>
@@ -356,7 +300,7 @@ namespace Microsoft.Diagnostics.NETCore.Client
             //}
 
             IpcMessage request = CreateProcessInfoMessage();
-            using IpcResponse response = await IpcClient.SendMessageGetContinuationAsync(_endpoint, request, token);
+            using IpcResponse response = await IpcClient.SendMessageGetContinuationAsync(_endpoint, request, token).ConfigureAwait(false);
             return GetProcessInfoFromResponse(response, nameof(GetProcessInfoAsync));
         }
 
@@ -370,7 +314,7 @@ namespace Microsoft.Diagnostics.NETCore.Client
         private async Task<ProcessInfo> TryGetProcessInfo2Async(CancellationToken token)
         {
             IpcMessage request = CreateProcessInfo2Message();
-            using IpcResponse response2 = await IpcClient.SendMessageGetContinuationAsync(_endpoint, request, token);
+            using IpcResponse response2 = await IpcClient.SendMessageGetContinuationAsync(_endpoint, request, token).ConfigureAwait(false);
             return TryGetProcessInfo2FromResponse(response2, nameof(GetProcessInfoAsync));
         }
 
@@ -454,6 +398,22 @@ namespace Microsoft.Diagnostics.NETCore.Client
             }
         }
 
+        private static IpcMessage CreateAttachProfilerMessage(TimeSpan attachTimeout, Guid profilerGuid, string profilerPath, byte[] additionalData)
+        {
+            if (profilerGuid == null || profilerGuid == Guid.Empty)
+            {
+                throw new ArgumentException($"{nameof(profilerGuid)} must be a valid Guid");
+            }
+
+            if (String.IsNullOrEmpty(profilerPath))
+            {
+                throw new ArgumentException($"{nameof(profilerPath)} must be non-null");
+            }
+
+            byte[] serializedConfiguration = SerializePayload((uint)attachTimeout.TotalSeconds, profilerGuid, profilerPath, additionalData);
+            return new IpcMessage(DiagnosticsServerCommandSet.Profiler, (byte)ProfilerCommandId.AttachProfiler, serializedConfiguration);
+        }
+
         private static IpcMessage CreateProcessEnvironmentMessage()
         {
             return new IpcMessage(DiagnosticsServerCommandSet.Process, (byte)ProcessCommandId.GetProcessEnvironment);
@@ -472,6 +432,33 @@ namespace Microsoft.Diagnostics.NETCore.Client
         private static IpcMessage CreateResumeRuntimeMessage()
         {
             return new IpcMessage(DiagnosticsServerCommandSet.Process, (byte)ProcessCommandId.ResumeRuntime);
+        }
+
+        private static IpcMessage CreateSetEnvironmentVariableMessage(string name, string value)
+        {
+            if (String.IsNullOrEmpty(name))
+            {
+                throw new ArgumentException($"{nameof(name)} must be non-null.");
+            }
+
+            byte[] serializedConfiguration = SerializePayload(name, value);
+            return new IpcMessage(DiagnosticsServerCommandSet.Process, (byte)ProcessCommandId.SetEnvironmentVariable, serializedConfiguration);
+        }
+
+        private static IpcMessage CreateSetStartupProfilerMessage(Guid profilerGuid, string profilerPath)
+        {
+            if (profilerGuid == null || profilerGuid == Guid.Empty)
+            {
+                throw new ArgumentException($"{nameof(profilerGuid)} must be a valid Guid");
+            }
+
+            if (String.IsNullOrEmpty(profilerPath))
+            {
+                throw new ArgumentException($"{nameof(profilerPath)} must be non-null");
+            }
+
+            byte[] serializedConfiguration = SerializePayload(profilerGuid, profilerPath);
+            return new IpcMessage(DiagnosticsServerCommandSet.Profiler, (byte)ProfilerCommandId.StartupProfiler, serializedConfiguration);
         }
 
         private static IpcMessage CreateWriteDumpMessage(DumpType dumpType, string dumpPath, bool logDumpGeneration)
@@ -514,19 +501,28 @@ namespace Microsoft.Diagnostics.NETCore.Client
             {
                 case DiagnosticsServerResponseId.Error:
                     uint hr = BitConverter.ToUInt32(responseMessage.Payload, 0);
-                    if (hr == (uint)DiagnosticsIpcError.UnknownCommand)
+                    switch (hr)
                     {
-                        if (options.HasFlag(ValidateResponseOptions.UnknownCommandReturnsFalse))
-                        {
-                            return false;
-                        }
-                        throw new UnsupportedCommandException($"{operationName} failed - Command is not supported.");
+                        case (uint)DiagnosticsIpcError.UnknownCommand:
+                            if (options.HasFlag(ValidateResponseOptions.UnknownCommandReturnsFalse))
+                            {
+                                return false;
+                            }
+                            throw new UnsupportedCommandException($"{operationName} failed - Command is not supported.");
+                        case (uint)DiagnosticsIpcError.ProfilerAlreadyActive:
+                            throw new ProfilerAlreadyActiveException($"{operationName} failed - A profiler is already loaded.");
+                        case (uint)DiagnosticsIpcError.InvalidArgument:
+                            if (options.HasFlag(ValidateResponseOptions.InvalidArgumentIsRequiresSuspension))
+                            {
+                                throw new ServerErrorException($"{operationName} failed - The runtime must be suspended for this command.");
+                            }
+                            throw new UnsupportedCommandException($"{operationName} failed - Invalid command argument.");
                     }
-                    throw new ServerErrorException($"{operationName} failed (HRESULT: 0x{hr:X8})");
+                    throw new ServerErrorException($"{operationName} failed - HRESULT: 0x{hr:X8}");
                 case DiagnosticsServerResponseId.OK:
                     return true;
                 default:
-                    throw new ServerErrorException($"{operationName} failed - server responded with unknown command.");
+                    throw new ServerErrorException($"{operationName} failed - Server responded with unknown command.");
             }
         }
 
@@ -534,7 +530,8 @@ namespace Microsoft.Diagnostics.NETCore.Client
         internal enum ValidateResponseOptions
         {
             None = 0x0,
-            UnknownCommandReturnsFalse = 0x1
+            UnknownCommandReturnsFalse = 0x1,
+            InvalidArgumentIsRequiresSuspension = 0x2,
         }
     }
 }
