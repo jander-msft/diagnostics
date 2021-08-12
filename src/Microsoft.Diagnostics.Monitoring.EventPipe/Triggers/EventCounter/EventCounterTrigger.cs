@@ -10,7 +10,7 @@ using System.Linq;
 namespace Microsoft.Diagnostics.Monitoring.EventPipe.Triggers.EventCounter
 {
     internal sealed class EventCounterTrigger :
-        ITraceEventTrigger
+        IEventTrigger<TraceEvent>
     {
         private readonly Queue<Tuple<DateTime, bool>> _backlog;
         private readonly int _targetCount;

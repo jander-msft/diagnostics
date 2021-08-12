@@ -15,8 +15,8 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.Triggers.Pipelines
     {
         private readonly Action<TraceEvent> _callback;
 
-        private TraceEventTriggerPipeline _pipeline;
-        private ITraceEventTrigger _trigger;
+        private EventTriggerPipeline<TraceEvent> _pipeline;
+        private IEventTrigger<TraceEvent> _trigger;
 
         public EventPipeTriggerPipeline(DiagnosticsClient client, EventPipeTriggerPipelineSettings<TOptions> settings, Action<TraceEvent> callback) :
             base(client, settings)
@@ -36,9 +36,13 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.Triggers.Pipelines
 
         protected override async Task OnEventSourceAvailable(EventPipeEventSource eventSource, Func<Task> stopSessionAsync, CancellationToken token)
         {
-            _trigger = Settings.TriggerFactory.Create(Settings.TriggerOptions);
+            _trigger = Settings.TriggerFactory.CreateTrigger(Settings.TriggerOptions);
 
-            _pipeline = new(eventSource, _trigger, _callback);
+            var descriptors = Settings.TriggerFactory.GetDescriptors(Settings.TriggerOptions);
+
+            EventTriggerTraceEventSource eventTriggerEventSource = new(eventSource);
+
+            _pipeline = new(eventTriggerEventSource, _trigger, descriptors, _callback);
 
             await _pipeline.RunAsync(token).ConfigureAwait(false);
         }

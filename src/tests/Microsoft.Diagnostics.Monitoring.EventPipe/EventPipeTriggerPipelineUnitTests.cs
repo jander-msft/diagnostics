@@ -7,6 +7,7 @@ using Microsoft.Diagnostics.Monitoring.EventPipe.Triggers.Pipelines;
 using Microsoft.Diagnostics.NETCore.Client;
 using Microsoft.Diagnostics.NETCore.Client.UnitTests;
 using Microsoft.Diagnostics.Tracing;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
@@ -63,15 +64,20 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.UnitTests
             return RemoteTestExecution.StartProcess(CommonHelper.GetTraceePathWithArgs("EventPipeTracee") + " " + loggerCategory, _output);
         }
 
-        private sealed class TestTriggerFactory : ITraceEventTriggerFactory<int>
+        private sealed class TestTriggerFactory : IEventTriggerFactory<TraceEvent, int>
         {
-            public ITraceEventTrigger Create(int settings)
+            public IEventTrigger<TraceEvent> CreateTrigger(int settings)
             {
                 return new TestTrigger(settings);
             }
+
+            public IEnumerable<EventTriggerSubscriptionDescriptor> GetDescriptors(int settings)
+            {
+                yield return new EventTriggerSubscriptionDescriptor() { EventName = "EventCounters", ProviderName = "System.Runtime" };
+            }
         }
 
-        public sealed class TestTrigger : ITraceEventTrigger
+        public sealed class TestTrigger : IEventTrigger<TraceEvent>
         {
             private const string RuntimeEventProviderName = "System.Runtime";
 

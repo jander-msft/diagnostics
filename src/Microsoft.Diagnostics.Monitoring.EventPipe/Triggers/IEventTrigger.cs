@@ -6,8 +6,8 @@ using Microsoft.Diagnostics.Tracing;
 
 namespace Microsoft.Diagnostics.Monitoring.EventPipe.Triggers
 {
-    internal interface ITraceEventTrigger
+    internal interface IEventTrigger<TEvent>
     {
-        bool HasSatisfiedCondition(TraceEvent traceEvent);
+        bool HasSatisfiedCondition(TEvent @event);
     }
 }
