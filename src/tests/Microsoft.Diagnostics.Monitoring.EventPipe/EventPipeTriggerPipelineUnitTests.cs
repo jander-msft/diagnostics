@@ -47,7 +47,7 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.UnitTests
                     },
                     traceEvent =>
                     {
-                        waitSource.SetResult(null);
+                        waitSource.TrySetResult(null);
                     });
 
                 await PipelineTestUtilities.ExecutePipelineWithDebugee(
@@ -55,6 +55,8 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.UnitTests
                     pipeline,
                     testExecution,
                     waitSource);
+
+                Assert.True(waitSource.Task.IsCompletedSuccessfully);
             }
         }
 
@@ -73,8 +75,6 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.UnitTests
 
         public sealed class TestTrigger : ITraceEventTrigger
         {
-            private const string RuntimeEventProviderName = "System.Runtime";
-
             private readonly CounterFilter _filter;
 
             private int _eventCount = 0;
@@ -82,12 +82,14 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.UnitTests
             public TestTrigger(int interval)
             {
                 _filter = new CounterFilter(interval);
-                _filter.AddFilter(RuntimeEventProviderName, new string[] { "cpu-usage" });
+                _filter.AddFilter(
+                    EventCounterConstants.RuntimeProviderName,
+                    new string[] { EventCounterConstants.CpuUsageCounterName });
             }
 
             public bool HasSatisfiedCondition(TraceEvent traceEvent)
             {
-                if (traceEvent.TryGetCounterPayload(_filter, out _))
+                if (traceEvent.TryGetCounterPayload(_filter, out ICounterPayload payload))
                 {
                     _eventCount++;
                 }
@@ -97,7 +99,7 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.UnitTests
 
             public static MonitoringSourceConfiguration CreateConfiguration(int settings)
             {
-                return new MetricSourceConfiguration(settings, new string[] { RuntimeEventProviderName });
+                return new MetricSourceConfiguration(settings, new string[] { EventCounterConstants.RuntimeProviderName });
             }
         }
     }
