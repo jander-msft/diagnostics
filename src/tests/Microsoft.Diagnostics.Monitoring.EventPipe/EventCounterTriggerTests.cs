@@ -18,9 +18,14 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.UnitTests
             _output = output;
         }
 
+        /// <summary>
+        /// Test that the trigger condition can be satisfied when detecting counter
+        /// values higher than the specified threshold for a duration of time.
+        /// </summary>
         [Fact]
         public void EventCounterTriggerGreaterThanTest()
         {
+            // The counter value must be greater than 0.70 for at least 3 seconds.
             const double Threshold = 0.70; // 70%
             const int Interval = 1; // 1 second
             TimeSpan WindowDuration = TimeSpan.FromSeconds(3);
@@ -59,9 +64,14 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.UnitTests
             SimulateDataVerifyTrigger(settings, data);
         }
 
+        /// <summary>
+        /// Test that the trigger condition can be satisfied when detecting counter
+        /// values lower than the specified threshold for a duration of time.
+        /// </summary>
         [Fact]
         public void EventCounterTriggerLessThanTest()
         {
+            // The counter value must be less than 0.70 for at least 3 seconds.
             const double Threshold = 0.70; // 70%
             const int Interval = 1; // 1 second
             TimeSpan WindowDuration = TimeSpan.FromSeconds(3);
@@ -95,9 +105,14 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.UnitTests
             SimulateDataVerifyTrigger(settings, data);
         }
 
+        /// <summary>
+        /// Test that the trigger condition can be satisfied when detecting counter
+        /// values that fall between two thresholds for a duration of time.
+        /// </summary>
         [Fact]
         public void EventCounterTriggerRangeTest()
         {
+            // The counter value must be between 0.25 and 0.35 for at least 8 seconds.
             const double LowerThreshold = 0.25; // 25%
             const double UpperThreshold = 0.35; // 35%
             const int Interval = 2; // 2 seconds
@@ -137,9 +152,15 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.UnitTests
             SimulateDataVerifyTrigger(settings, data);
         }
 
+        /// <summary>
+        /// Test that the trigger condition will not be satisfied if successive
+        /// counter events are missing from the stream (e.g. events are dropped due
+        /// to event pipe buffer being filled).
+        /// </summary>
         [Fact]
         public void EventCounterTriggerDropTest()
         {
+            // The counter value must be greater than 0.50 for at least 10 seconds.
             const double Threshold = 0.50; // 50%
             const int Interval = 2; // 2 second
             TimeSpan WindowDuration = TimeSpan.FromSeconds(10);
@@ -180,11 +201,29 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.UnitTests
             SimulateDataVerifyTrigger(settings, data);
         }
 
+        /// <summary>
+        /// Run the specified sample CPU data through a simple simulation to test the capabilities
+        /// of the event counter trigger. This uses a random number seed to generate random variations
+        /// in timestamp and interval data.
+        /// </summary>
         private void SimulateDataVerifyTrigger(EventCounterTriggerSettings settings, CpuData[] cpuData)
+        {
+            Random random = new Random();
+            int seed = random.Next();
+            _output.WriteLine("Simulation seed: {0}", seed);
+            SimulateDataVerifyTrigger(settings, cpuData, seed);
+        }
+
+        /// <summary>
+        /// Run the specified sample CPU data through a simple simulation to test the capabilities
+        /// of the event counter trigger. This uses the specified seed value to seed the RNG that produces
+        /// random variations in timestamp and interval data; allows for replayability of generated variations.
+        /// </summary>
+        private void SimulateDataVerifyTrigger(EventCounterTriggerSettings settings, CpuData[] cpuData, int seed)
         {
             EventCounterTriggerImpl trigger = new(settings);
 
-            CpuUsagePayloadFactory payloadFactory = new(settings.CounterIntervalSeconds);
+            CpuUsagePayloadFactory payloadFactory = new(seed, settings.CounterIntervalSeconds);
 
             for (int i = 0; i < cpuData.Length; i++)
             {
@@ -208,32 +247,53 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.UnitTests
                 Value = value;
             }
 
+            /// <summary>
+            /// Specifies if the data should be "dropped" to simulate dropping of events.
+            /// </summary>
             public bool Drop { get; }
 
+            /// <summary>
+            /// The expected result of evaluating the trigger on this data.
+            /// </summary>
             public bool Result { get;}
 
+            /// <summary>
+            /// The sample CPU value to be given to the trigger for evaluation.
+            /// </summary>
             public double Value { get; }
         }
 
+        /// <summary>
+        /// Creates CPU Usage payloads in successive order, simulating the data produced
+        /// for the cpu-usage counter from the runtime.
+        /// </summary>
         private sealed class CpuUsagePayloadFactory
         {
             private readonly int _intervalSeconds;
-            private readonly Random _randomIntervalOffset =
-                new Random();
-            private readonly Random _randomTimestampOffset =
-                new Random();
+            private readonly Random _random;
 
             private DateTime? _lastTimestamp;
 
-            public CpuUsagePayloadFactory(int intervalSeconds)
+            public CpuUsagePayloadFactory(int seed, int intervalSeconds)
             {
                 _intervalSeconds = intervalSeconds;
+                _random = new Random(seed);
             }
 
+            /// <summary>
+            /// Creates the next counter payload based on the provided value.
+            /// </summary>
+            /// <remarks>
+            /// The timestamp is roughly incremented by the specified interval from the constructor
+            /// in order to simulate variations in the timestamp of counter events as seen in real
+            /// event data. The actual interval is also roughly generated from specified interval
+            /// from the constructor to simulate variations in the collection interval as seen in
+            /// real event data.
+            /// </remarks>
             public ICounterPayload CreateNext(double value)
             {
-                // Add some variance between 0 to 10 milliseconds to simulate real actual interval value.
-                float actualInterval = Convert.ToSingle(_intervalSeconds + _randomIntervalOffset.NextDouble() / 100);
+                // Add some variance between 0 to 10 milliseconds to simulate real interval value.
+                float actualInterval = Convert.ToSingle(_intervalSeconds + _random.NextDouble() / 100);
 
                 if (!_lastTimestamp.HasValue)
                 {
@@ -246,16 +306,11 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.UnitTests
                     _lastTimestamp = _lastTimestamp.Value.AddSeconds(actualInterval);
                 }
 
-                // Add some variance between 0 and 10 milliseconds to simulate real actual timestamp
-                _lastTimestamp = _lastTimestamp.Value.AddMilliseconds(10 * _randomTimestampOffset.NextDouble());
+                // Add some variance between 0 and 10 milliseconds to simulate real timestamp
+                _lastTimestamp = _lastTimestamp.Value.AddMilliseconds(10 * _random.NextDouble());
 
-                return CreateCpuUsagePayload(value, _lastTimestamp.Value, actualInterval);
-            }
-
-            private static ICounterPayload CreateCpuUsagePayload(double value, DateTime timestamp, float actualInterval)
-            {
                 return new CounterPayload(
-                    timestamp,
+                    _lastTimestamp.Value,
                     EventCounterConstants.RuntimeProviderName,
                     EventCounterConstants.CpuUsageCounterName,
                     EventCounterConstants.CpuUsageDisplayName,
