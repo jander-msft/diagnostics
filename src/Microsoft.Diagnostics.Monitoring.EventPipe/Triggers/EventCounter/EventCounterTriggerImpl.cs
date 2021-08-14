@@ -11,12 +11,12 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.Triggers.EventCounter
     // for the implementation is for unit testability separate from TraceEvent.
     internal sealed class EventCounterTriggerImpl
     {
-        private readonly int _intervalSeconds;
+        private readonly long _intervalTicks;
         private readonly Func<double, bool> _valueFilter;
-        private readonly TimeSpan _window;
+        private readonly long _windowTicks;
 
-        private DateTime? _latestTimestamp;
-        private DateTime? _targetTimestamp;
+        private long? _latestTicks;
+        private long? _targetTicks;
 
         public CounterFilter Filter { get; }
 
@@ -49,38 +49,45 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.Triggers.EventCounter
                 _valueFilter = value => value < maxValue;
             }
 
-            _intervalSeconds = settings.CounterIntervalSeconds;
-            _window = settings.SlidingWindowDuration;
+            _intervalTicks = settings.CounterIntervalSeconds * TimeSpan.TicksPerSecond;
+            _windowTicks = settings.SlidingWindowDuration.Ticks;
         }
 
         public bool HasSatisfiedCondition(ICounterPayload payload)
         {
+            long payloadTimestampTicks = payload.Timestamp.Ticks;
+            long payloadIntervalTicks = (long)(payload.Interval * TimeSpan.TicksPerSecond);
+
             if (!_valueFilter(payload.Value))
             {
-                _latestTimestamp = null;
-                _targetTimestamp = null;
+                // Series was broken; reset state.
+                _latestTicks = null;
+                _targetTicks = null;
                 return false;
             }
-            else if (!_targetTimestamp.HasValue)
+            else if (!_targetTicks.HasValue)
             {
-                _latestTimestamp = payload.Timestamp;
-                _targetTimestamp = payload.Timestamp
-                    .AddSeconds(-payload.Interval)
-                    .Add(_window);
+                // This is the first event in the series. Record latest and target times.
+                _latestTicks = payloadTimestampTicks;
+                _targetTicks = payloadTimestampTicks - payloadIntervalTicks + _windowTicks;
             }
-            else if (_latestTimestamp.Value.AddSeconds(1.5 * _intervalSeconds) < payload.Timestamp)
+            else if (_latestTicks.Value + (1.5 * _intervalTicks) < payloadTimestampTicks)
             {
-                _latestTimestamp = payload.Timestamp;
-                _targetTimestamp = payload.Timestamp
-                    .AddSeconds(-payload.Interval)
-                    .Add(_window);
+                // Detected that an event was skipped/dropped because the time between the current
+                // event and the previous is more that 150% of the requested interval; consecutive
+                // counter events should not have that large of an interval. Reset for current
+                // event to be first event in series. Record latest and target times.
+                _latestTicks = payloadTimestampTicks;
+                _targetTicks = payloadTimestampTicks - payloadIntervalTicks + _windowTicks;
             }
             else
             {
-                _latestTimestamp = payload.Timestamp;
+                // Update latest time to the current event time.
+                _latestTicks = payloadTimestampTicks;
             }
 
-            return _latestTimestamp >= _targetTimestamp;
+            // Trigger is satisfied when the latest time is larger than the targe time.
+            return _latestTicks >= _targetTicks;
         }
     }
 }
