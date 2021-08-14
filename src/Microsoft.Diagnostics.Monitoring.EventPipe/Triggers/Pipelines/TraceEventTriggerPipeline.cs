@@ -12,7 +12,8 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.Triggers.Pipelines
     internal sealed class TraceEventTriggerPipeline : Pipeline
     {
         private readonly Action<TraceEvent> _callback;
-        private readonly TaskCompletionSource<object> _completionSource;
+        private readonly TaskCompletionSource<object> _completionSource =
+            new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly TraceEventSource _eventSource;
         private readonly ITraceEventTrigger _trigger;
 
@@ -20,7 +21,6 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.Triggers.Pipelines
         {
             _callback = callback ?? throw new ArgumentNullException(nameof(callback));
             _eventSource = eventSource ?? throw new ArgumentNullException(nameof(eventSource));
-            _completionSource = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
             _trigger = trigger ?? throw new ArgumentNullException(nameof(trigger));
         }
 

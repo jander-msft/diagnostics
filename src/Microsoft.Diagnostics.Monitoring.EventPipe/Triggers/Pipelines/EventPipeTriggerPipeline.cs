@@ -10,15 +10,19 @@ using System.Threading.Tasks;
 
 namespace Microsoft.Diagnostics.Monitoring.EventPipe.Triggers.Pipelines
 {
-    internal sealed class EventPipeTriggerPipeline<TOptions> :
-        EventSourcePipeline<EventPipeTriggerPipelineSettings<TOptions>>
+    /// <summary>
+    /// Starts an event pipe session using the specified configuration and 
+    /// </summary>
+    /// <typeparam name="TSettings">The settings type of the trace event trigger.</typeparam>
+    internal sealed class EventPipeTriggerPipeline<TSettings> :
+        EventSourcePipeline<EventPipeTriggerPipelineSettings<TSettings>>
     {
         private readonly Action<TraceEvent> _callback;
 
         private TraceEventTriggerPipeline _pipeline;
         private ITraceEventTrigger _trigger;
 
-        public EventPipeTriggerPipeline(DiagnosticsClient client, EventPipeTriggerPipelineSettings<TOptions> settings, Action<TraceEvent> callback) :
+        public EventPipeTriggerPipeline(DiagnosticsClient client, EventPipeTriggerPipelineSettings<TSettings> settings, Action<TraceEvent> callback) :
             base(client, settings)
         {
             if (null == Settings.TriggerFactory)
@@ -36,7 +40,7 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.Triggers.Pipelines
 
         protected override async Task OnEventSourceAvailable(EventPipeEventSource eventSource, Func<Task> stopSessionAsync, CancellationToken token)
         {
-            _trigger = Settings.TriggerFactory.Create(Settings.TriggerOptions);
+            _trigger = Settings.TriggerFactory.Create(Settings.TriggerSettings);
 
             _pipeline = new(eventSource, _trigger, _callback);
 

@@ -4,12 +4,13 @@
 
 namespace Microsoft.Diagnostics.Monitoring.EventPipe.Triggers.Pipelines
 {
-    internal sealed class EventPipeTriggerPipelineSettings<TOptions> : EventSourcePipelineSettings
+    internal sealed class EventPipeTriggerPipelineSettings<TSettings> :
+        EventSourcePipelineSettings
     {
         public MonitoringSourceConfiguration Configuration { get; set; }
 
-        public ITraceEventTriggerFactory<TOptions> TriggerFactory { get; set; }
+        public ITraceEventTriggerFactory<TSettings> TriggerFactory { get; set; }
 
-        public TOptions TriggerOptions { get; set; }
+        public TSettings TriggerSettings { get; set; }
     }
 }

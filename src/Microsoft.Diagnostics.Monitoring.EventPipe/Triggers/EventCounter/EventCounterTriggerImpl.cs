@@ -3,8 +3,6 @@
 // See the LICENSE file in the project root for more information.
 
 using System;
-using System.Collections.Generic;
-using System.Linq;
 
 namespace Microsoft.Diagnostics.Monitoring.EventPipe.Triggers.EventCounter
 {
@@ -13,10 +11,12 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.Triggers.EventCounter
     // for the implementation is for unit testability separate from TraceEvent.
     internal sealed class EventCounterTriggerImpl
     {
-        private readonly Queue<DateTime> _backlog;
-        private readonly int _targetCount;
+        private readonly int _intervalSeconds;
         private readonly Func<double, bool> _valueFilter;
-        private TimeSpan _window;
+        private readonly TimeSpan _window;
+
+        private DateTime? _latestTimestamp;
+        private DateTime? _targetTimestamp;
 
         public CounterFilter Filter { get; }
 
@@ -49,34 +49,38 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe.Triggers.EventCounter
                 _valueFilter = value => value < maxValue;
             }
 
-            _targetCount = Convert.ToInt32(Math.Floor(
-                settings.SlidingWindowDuration.TotalSeconds / settings.CounterIntervalSeconds));
-
-            _backlog = new Queue<DateTime>(_targetCount);
+            _intervalSeconds = settings.CounterIntervalSeconds;
             _window = settings.SlidingWindowDuration;
         }
 
         public bool HasSatisfiedCondition(ICounterPayload payload)
         {
-            // Prevent queue from growing larger than the target count.
-            if (_backlog.Count == _targetCount)
+            if (!_valueFilter(payload.Value))
             {
-                _backlog.Dequeue();
+                _latestTimestamp = null;
+                _targetTimestamp = null;
+                return false;
+            }
+            else if (!_targetTimestamp.HasValue)
+            {
+                _latestTimestamp = payload.Timestamp;
+                _targetTimestamp = payload.Timestamp
+                    .AddSeconds(-payload.Interval)
+                    .Add(_window);
+            }
+            else if (_latestTimestamp.Value.AddSeconds(1.5 * _intervalSeconds) < payload.Timestamp)
+            {
+                _latestTimestamp = payload.Timestamp;
+                _targetTimestamp = payload.Timestamp
+                    .AddSeconds(-payload.Interval)
+                    .Add(_window);
+            }
+            else
+            {
+                _latestTimestamp = payload.Timestamp;
             }
 
-            if (_valueFilter(payload.Value))
-            {
-                _backlog.Enqueue(payload.Timestamp);
-
-                if (_backlog.Count == _targetCount)
-                {
-                    DateTime oldestAllowedTimestamp = payload.Timestamp - _window;
-
-                    return _backlog.All(t => t > oldestAllowedTimestamp);
-                }
-            }
-
-            return false;
+            return _latestTimestamp >= _targetTimestamp;
         }
     }
 }
