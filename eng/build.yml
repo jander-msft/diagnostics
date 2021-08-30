@@ -213,13 +213,22 @@ jobs:
       # Publish test results to Azure Pipelines
       - task: PublishTestResults@2
         inputs:
-          testResultsFormat: xUnit
-          testResultsFiles: '**/*UnitTests*.xml' 
+          testResultsFormat: VSTest
+          testResultsFiles: '**/*UnitTests*.trx' 
           searchFolder: '$(Build.SourcesDirectory)/artifacts/TestResults'
           failTaskOnFailedTests: true
           testRunTitle: 'Tests $(_PhaseName) $(_BuildArch) $(_BuildConfig)'
           publishRunAttachments: true
           mergeTestResults: true
           buildConfiguration: ${{ parameters.name }}
+        continueOnError: true
+        condition: ne(variables['_BuildOnly'], 'true')
+    
+      - task: PublishBuildArtifacts@1
+        displayName: Publish TestResults
+        inputs:
+          PathtoPublish: '$(Build.SourcesDirectory)/artifacts/TestResults'
+          PublishLocation: Container
+          ArtifactName: TestResults_$(_PhaseName)_$(_BuildArch)_$(_BuildConfig)
         continueOnError: true
         condition: ne(variables['_BuildOnly'], 'true')

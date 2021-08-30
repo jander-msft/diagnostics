@@ -19,6 +19,10 @@
     <CheckForOverflowUnderflow>false</CheckForOverflowUnderflow>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(ContinuousIntegrationBuild)' == 'true'">
+    <TestRunnerAdditionalArguments>--blame "CollectHangDump;TestTimeout=3m"</TestRunnerAdditionalArguments>
+  </PropertyGroup>
+
   <PropertyGroup Condition="'$(TargetFramework)' == 'net462'">
     <DebugType>full</DebugType>
   </PropertyGroup>
