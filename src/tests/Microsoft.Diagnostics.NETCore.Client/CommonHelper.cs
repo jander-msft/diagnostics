@@ -38,8 +38,8 @@ namespace Microsoft.Diagnostics.NETCore.Client
 
             // CurrentDARCVersion is generated at build time by Microsoft.Diagnostics.NETCore.Client.UnitTests.csproj
             // This value will be set to whatever the value for the newest runtime in eng/Versions.Props is
-            if (targetFramework.Equals("net5.0", StringComparison.InvariantCultureIgnoreCase))
-                traceePath = $"--fx-version {CurrentDARCVersion} {traceePath}";
+            // if (targetFramework.Equals("net5.0", StringComparison.InvariantCultureIgnoreCase))
+            //     traceePath = $"--fx-version {CurrentDARCVersion} {traceePath}";
 
             return traceePath;
         }
