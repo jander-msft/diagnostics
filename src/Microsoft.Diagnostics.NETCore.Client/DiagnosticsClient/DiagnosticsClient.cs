@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -475,6 +476,8 @@ namespace Microsoft.Diagnostics.NETCore.Client
         {
             ValidateResponseMessage(response.Message, operationName);
 
+            Console.WriteLine("Payload V1: {0}", ToHexString(response.Message.Payload));
+
             return ProcessInfo.ParseV1(response.Message.Payload);
         }
 
@@ -485,7 +488,26 @@ namespace Microsoft.Diagnostics.NETCore.Client
                 return null;
             }
 
+            Console.WriteLine("Payload V2: {0}", ToHexString(response.Message.Payload));
+
             return ProcessInfo.ParseV2(response.Message.Payload);
+        }
+
+        private static string ToHexString(byte[] payload)
+        {
+            if (null == payload || payload.Length == 0)
+            {
+                return string.Empty;
+            }
+
+            StringBuilder builder = new(payload.Length * 3);
+            for (int i = 0; i < payload.Length - 1; i++)
+            {
+                builder.AppendFormat("{0:X2} ", payload[i]);
+            }
+            builder.AppendFormat("{0:X2}", payload[payload.Length - 1]);
+
+            return builder.ToString();
         }
 
         internal static bool ValidateResponseMessage(IpcMessage responseMessage, string operationName, ValidateResponseOptions options = ValidateResponseOptions.None)
