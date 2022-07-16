@@ -122,7 +122,12 @@ namespace Microsoft.Diagnostics.NETCore.Client
                 throw new InvalidOperationException(nameof(ReversedDiagnosticsServer.Start) + " method can only be called once.");
             }
 
-            _listenTask = ListenAsync(maxConnections, _disposalSource.Token);
+            IpcServerTransport transport = IpcServerTransport.Create(_address, maxConnections, _enableTcpIpProtocol, TransportCallback);
+
+            // Start accepting connections from the transport. The ownership of the transport is transfer
+            // to the AcceptAsync method so as to not dispose the transport until the server is shut down.
+            _listenTask = AcceptAsync(transport, _disposalSource.Token);
+
             if (_listenTask.IsFaulted)
                 _listenTask.Wait(); // Rethrow aggregated exception.
         }
@@ -188,88 +193,94 @@ namespace Microsoft.Diagnostics.NETCore.Client
         }
 
         /// <summary>
-        /// Listens at the address for new connections.
+        /// Accept connections from the transport.
         /// </summary>
-        /// <param name="maxConnections">The maximum number of connections the server will support.</param>
+        /// <param name="transport">The server transport from which connections are accepted.</param>
         /// <param name="token">The token to monitor for cancellation requests.</param>
         /// <returns>A task that completes when the server is no longer listening at the address.</returns>
-        private async Task ListenAsync(int maxConnections, CancellationToken token)
+        private async Task AcceptAsync(IpcServerTransport transport, CancellationToken token)
         {
-            // This disposal shuts down the transport in case an exception is thrown.
-            using var transport = IpcServerTransport.Create(_address, maxConnections, _enableTcpIpProtocol, TransportCallback);
-            // This disposal shuts down the transport in case of cancellation; causes the transport
-            // to not recreate the server stream before the AcceptAsync call observes the cancellation.
-            using var _ = token.Register(() => transport.Dispose());
-
-            while (!token.IsCancellationRequested)
+            try
             {
-                Stream stream = null;
-                IpcAdvertise advertise = null;
-                try
-                {
-                    stream = await transport.AcceptAsync(token).ConfigureAwait(false);
-                }
-                catch (OperationCanceledException)
-                {
-                }
-                catch (Exception)
-                {
-                    // The advertise data could be incomplete if the runtime shuts down before completely writing
-                    // the information. Catch the exception and continue waiting for a new connection.
-                }
+                // This disposal shuts down the transport in case of cancellation; causes the transport
+                // to not recreate the server stream before the AcceptAsync call observes the cancellation.
+                using var _ = token.Register(() => transport.Dispose());
 
-                if (null != stream)
+                while (!token.IsCancellationRequested)
                 {
-                    // Cancel parsing of advertise data after timeout period to
-                    // mitigate runtimes that write partial data and do not close the stream (avoid waiting forever).
-                    using var parseCancellationSource = new CancellationTokenSource();
-                    using var linkedSource = CancellationTokenSource.CreateLinkedTokenSource(token, parseCancellationSource.Token);
+                    Stream stream = null;
+                    IpcAdvertise advertise = null;
                     try
                     {
-                        parseCancellationSource.CancelAfter(ParseAdvertiseTimeout);
-
-                        advertise = await IpcAdvertise.ParseAsync(stream, linkedSource.Token).ConfigureAwait(false);
+                        stream = await transport.AcceptAsync(token).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException)
+                    {
                     }
                     catch (Exception)
                     {
-                        stream.Dispose();
+                        // The advertise data could be incomplete if the runtime shuts down before completely writing
+                        // the information. Catch the exception and continue waiting for a new connection.
                     }
-                }
 
-                if (null != advertise)
-                {
-                    Guid runtimeCookie = advertise.RuntimeInstanceCookie;
-                    int pid = unchecked((int)advertise.ProcessId);
-
-                    // The valueFactory parameter of the GetOrAdd overload that uses Func<TKey, TValue> valueFactory
-                    // does not execute the factory under a lock thus it is not thread-safe. Create the collection and
-                    // use a thread-safe version of GetOrAdd; use equality comparison on the result to determine if
-                    // the new collection was added to the dictionary or if an existing one was returned.
-                    var newStreamCollection = new HandleableCollection<Stream>();
-                    var streamCollection = _streamCollections.GetOrAdd(runtimeCookie, newStreamCollection);
-
-                    try
+                    if (null != stream)
                     {
-                        streamCollection.ClearItems();
-                        streamCollection.Add(stream);
+                        // Cancel parsing of advertise data after timeout period to
+                        // mitigate runtimes that write partial data and do not close the stream (avoid waiting forever).
+                        using var parseCancellationSource = new CancellationTokenSource();
+                        using var linkedSource = CancellationTokenSource.CreateLinkedTokenSource(token, parseCancellationSource.Token);
+                        try
+                        {
+                            parseCancellationSource.CancelAfter(ParseAdvertiseTimeout);
 
-                        if (newStreamCollection == streamCollection)
-                        {
-                            ServerIpcEndpoint endpoint = new ServerIpcEndpoint(this, runtimeCookie);
-                            _endpointInfos.Add(new IpcEndpointInfo(endpoint, pid, runtimeCookie));
+                            advertise = await IpcAdvertise.ParseAsync(stream, linkedSource.Token).ConfigureAwait(false);
                         }
-                        else
+                        catch (Exception)
                         {
-                            newStreamCollection.Dispose();
+                            stream.Dispose();
                         }
                     }
-                    catch (ObjectDisposedException)
+
+                    if (null != advertise)
                     {
-                        // The stream collection could be disposed by RemoveConnection which would cause an
-                        // ObjectDisposedException to be thrown if trying to clear/add the stream.
-                        stream.Dispose();
+                        Guid runtimeCookie = advertise.RuntimeInstanceCookie;
+                        int pid = unchecked((int)advertise.ProcessId);
+
+                        // The valueFactory parameter of the GetOrAdd overload that uses Func<TKey, TValue> valueFactory
+                        // does not execute the factory under a lock thus it is not thread-safe. Create the collection and
+                        // use a thread-safe version of GetOrAdd; use equality comparison on the result to determine if
+                        // the new collection was added to the dictionary or if an existing one was returned.
+                        var newStreamCollection = new HandleableCollection<Stream>();
+                        var streamCollection = _streamCollections.GetOrAdd(runtimeCookie, newStreamCollection);
+
+                        try
+                        {
+                            streamCollection.ClearItems();
+                            streamCollection.Add(stream);
+
+                            if (newStreamCollection == streamCollection)
+                            {
+                                ServerIpcEndpoint endpoint = new ServerIpcEndpoint(this, runtimeCookie);
+                                _endpointInfos.Add(new IpcEndpointInfo(endpoint, pid, runtimeCookie));
+                            }
+                            else
+                            {
+                                newStreamCollection.Dispose();
+                            }
+                        }
+                        catch (ObjectDisposedException)
+                        {
+                            // The stream collection could be disposed by RemoveConnection which would cause an
+                            // ObjectDisposedException to be thrown if trying to clear/add the stream.
+                            stream.Dispose();
+                        }
                     }
                 }
+            }
+            finally
+            {
+                // This disposal shuts down the transport in case an exception is thrown.
+                transport.Dispose();
             }
         }
 

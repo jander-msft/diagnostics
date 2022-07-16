@@ -10,6 +10,7 @@ using System.Collections.Generic;
 using System.Diagnostics.Tracing;
 using System.IO;
 using System.Net;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
@@ -96,6 +97,36 @@ namespace Microsoft.Diagnostics.NETCore.Client
 
             Assert.Throws<ObjectDisposedException>(
                 () => server.RemoveConnection(Guid.Empty));
+        }
+
+        [Fact]
+        public async Task ReversedServerAddressInUseTest()
+        {
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                return;
+            }
+
+            await using var server = CreateReversedServer(out string transportName);
+
+            Assert.False(File.Exists(transportName), "Unix Domain Socket should not exist yet.");
+
+            try
+            {
+                File.Create(transportName).Dispose();
+
+                server.Start();
+            }
+            finally
+            {
+                try
+                {
+                    File.Delete(transportName);
+                }
+                catch (Exception)
+                {
+                }
+            }
         }
 
         /// <summary>
