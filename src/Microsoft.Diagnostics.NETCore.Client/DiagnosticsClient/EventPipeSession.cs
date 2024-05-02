@@ -3,7 +3,6 @@
 
 using System;
 using System.Buffers.Binary;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Threading;
@@ -30,16 +29,84 @@ namespace Microsoft.Diagnostics.NETCore.Client
 
         internal static EventPipeSession Start(IpcEndpoint endpoint, EventPipeSessionConfiguration config)
         {
-            IpcMessage requestMessage = CreateStartMessage(config);
+            IpcMessage requestMessage = CreateStartMessage(config, EventPipeCommandId.CollectTracing4);
             IpcResponse? response = IpcClient.SendMessageGetContinuation(endpoint, requestMessage);
-            return CreateSessionFromResponse(endpoint, ref response, nameof(Start));
+            try
+            {
+                EventPipeSession session = null;
+                if (DiagnosticsClient.ValidateResponseMessage(response.Value.Message, nameof(StartAsync), DiagnosticsClient.ValidateResponseOptions.UnknownCommandReturnsFalse))
+                {
+                    session = CreateSessionFromResponse(endpoint, ref response);
+                    // The session owns the continuation stream
+                    response = null;
+                    return session;
+                }
+
+                requestMessage = CreateStartMessage(config, EventPipeCommandId.CollectTracing3);
+                response = IpcClient.SendMessageGetContinuation(endpoint, requestMessage);
+
+                if (DiagnosticsClient.ValidateResponseMessage(response.Value.Message, nameof(StartAsync), DiagnosticsClient.ValidateResponseOptions.UnknownCommandReturnsFalse))
+                {
+                    session = CreateSessionFromResponse(endpoint, ref response);
+                    // The session owns the continuation stream
+                    response = null;
+                    return session;
+                }
+
+                requestMessage = CreateStartMessage(config, EventPipeCommandId.CollectTracing2);
+                response = IpcClient.SendMessageGetContinuation(endpoint, requestMessage);
+                DiagnosticsClient.ValidateResponseMessage(response.Value.Message, nameof(StartAsync));
+
+                session = CreateSessionFromResponse(endpoint, ref response);
+                // The session owns the continuation stream
+                response = null;
+                return session;
+            }
+            finally
+            {
+                response?.Dispose();
+            }
         }
 
         internal static async Task<EventPipeSession> StartAsync(IpcEndpoint endpoint, EventPipeSessionConfiguration config, CancellationToken cancellationToken)
         {
-            IpcMessage requestMessage = CreateStartMessage(config);
+            IpcMessage requestMessage = CreateStartMessage(config, EventPipeCommandId.CollectTracing4);
             IpcResponse? response = await IpcClient.SendMessageGetContinuationAsync(endpoint, requestMessage, cancellationToken).ConfigureAwait(false);
-            return CreateSessionFromResponse(endpoint, ref response, nameof(StartAsync));
+            try
+            {
+                EventPipeSession session = null;
+                if (DiagnosticsClient.ValidateResponseMessage(response.Value.Message, nameof(StartAsync), DiagnosticsClient.ValidateResponseOptions.UnknownCommandReturnsFalse))
+                {
+                    session = CreateSessionFromResponse(endpoint, ref response);
+                    // The session owns the continuation stream
+                    response = null;
+                    return session;
+                }
+
+                requestMessage = CreateStartMessage(config, EventPipeCommandId.CollectTracing3);
+                response = await IpcClient.SendMessageGetContinuationAsync(endpoint, requestMessage, cancellationToken).ConfigureAwait(false);
+
+                if (DiagnosticsClient.ValidateResponseMessage(response.Value.Message, nameof(StartAsync), DiagnosticsClient.ValidateResponseOptions.UnknownCommandReturnsFalse))
+                {
+                    session = CreateSessionFromResponse(endpoint, ref response);
+                    // The session owns the continuation stream
+                    response = null;
+                    return session;
+                }
+
+                requestMessage = CreateStartMessage(config, EventPipeCommandId.CollectTracing2);
+                response = await IpcClient.SendMessageGetContinuationAsync(endpoint, requestMessage, cancellationToken).ConfigureAwait(false);
+                DiagnosticsClient.ValidateResponseMessage(response.Value.Message, nameof(StartAsync));
+
+                session = CreateSessionFromResponse(endpoint, ref response);
+                // The session owns the continuation stream
+                response = null;
+                return session;
+            }
+            finally
+            {
+                response?.Dispose();
+            }
         }
 
         ///<summary>
@@ -81,22 +148,23 @@ namespace Microsoft.Diagnostics.NETCore.Client
             }
         }
 
-        private static IpcMessage CreateStartMessage(EventPipeSessionConfiguration config)
+        private static IpcMessage CreateStartMessage(EventPipeSessionConfiguration config, EventPipeCommandId command)
         {
-            // To keep backward compatibility with older runtimes we only use newer serialization format when needed
-            // V3 has added support to disable the stacktraces
-            bool shouldUseV3 = !config.RequestStackwalk;
-            EventPipeCommandId command = shouldUseV3 ? EventPipeCommandId.CollectTracing3 : EventPipeCommandId.CollectTracing2;
-            byte[] payload = shouldUseV3 ? config.SerializeV3() : config.SerializeV2();
+            byte[] payload = command switch
+            {
+                EventPipeCommandId.CollectTracing => config.SerializeV2(),
+                EventPipeCommandId.CollectTracing2 => config.SerializeV2(),
+                EventPipeCommandId.CollectTracing3 => config.SerializeV3(),
+                EventPipeCommandId.CollectTracing4 => config.SerializeV4(),
+                _ => throw new ArgumentException(null, nameof(command))
+            };
             return new IpcMessage(DiagnosticsServerCommandSet.EventPipe, (byte)command, payload);
         }
 
-        private static EventPipeSession CreateSessionFromResponse(IpcEndpoint endpoint, ref IpcResponse? response, string operationName)
+        private static EventPipeSession CreateSessionFromResponse(IpcEndpoint endpoint, ref IpcResponse? response)
         {
             try
             {
-                DiagnosticsClient.ValidateResponseMessage(response.Value.Message, operationName);
-
                 ulong sessionId = BinaryPrimitives.ReadUInt64LittleEndian(new ReadOnlySpan<byte>(response.Value.Message.Payload, 0, 8));
 
                 EventPipeSession session = new(endpoint, response.Value, sessionId);

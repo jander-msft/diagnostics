@@ -157,6 +157,26 @@ namespace Microsoft.Diagnostics.NETCore.Client
             return serializedData;
         }
 
+        public static byte[] SerializeV4(this EventPipeSessionConfiguration config)
+        {
+            byte[] serializedData = null;
+            using (MemoryStream stream = new())
+            using (BinaryWriter writer = new(stream))
+            {
+                writer.Write(config.CircularBufferSizeInMB);
+                writer.Write((uint)config.Format);
+                writer.Write(config.GetRundownKeyword(rundownKeywordSupported: true));
+                writer.Write(config.RequestStackwalk);
+
+                SerializeProviders(config, writer);
+
+                writer.Flush();
+                serializedData = stream.ToArray();
+            }
+
+            return serializedData;
+        }
+
         private static void SerializeProviders(EventPipeSessionConfiguration config, BinaryWriter writer)
         {
             writer.Write(config.Providers.Count);
