@@ -11,11 +11,12 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
     {
         private readonly IEnumerable<EventPipeProvider> _providers;
         private readonly int _bufferSizeInMB;
+        private bool _requestRundown;
 
         public EventPipeProviderSourceConfiguration(bool requestRundown = true, int bufferSizeInMB = 256, params EventPipeProvider[] providers)
         {
             _providers = providers;
-            RequestRundown = requestRundown;
+            _requestRundown = requestRundown;
             _bufferSizeInMB = bufferSizeInMB;
         }
 
@@ -23,6 +24,8 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
         {
             return _providers.ToList();
         }
+
+        public override long GetRundownKeyword(bool rundownKeywordSupported) => _requestRundown ? EventPipeSessionConfiguration.DefaultRundownKeyword : 0;
 
         public override int BufferSizeInMB => _bufferSizeInMB;
     }

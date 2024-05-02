@@ -10,11 +10,6 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
 {
     public sealed class GCDumpSourceConfiguration : MonitoringSourceConfiguration
     {
-        public GCDumpSourceConfiguration()
-        {
-            RequestRundown = false;
-        }
-
         public override IList<EventPipeProvider> GetProviders()
         {
             List<EventPipeProvider> providers = new()
@@ -27,5 +22,7 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
 
             return providers;
         }
+
+        public override long GetRundownKeyword(bool rundownKeywordSupported) => 0;
     }
 }

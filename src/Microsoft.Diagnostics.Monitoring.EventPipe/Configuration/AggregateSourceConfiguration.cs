@@ -1,7 +1,6 @@
 ﻿// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using System;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.Diagnostics.NETCore.Client;
@@ -23,10 +22,9 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
             return _configurations.SelectMany(c => c.GetProviders()).ToList();
         }
 
-        public override bool RequestRundown
+        public override long GetRundownKeyword(bool rundownKeywordSupported)
         {
-            get => _configurations.Any(c => c.RequestRundown);
-            set => throw new NotSupportedException();
+            return _configurations.Select(c => c.GetRundownKeyword(rundownKeywordSupported)).Aggregate((x, y) => x | y);
         }
     }
 }

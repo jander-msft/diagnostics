@@ -48,8 +48,6 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
                 throw new ArgumentNullException(nameof(providers));
             }
 
-            RequestRundown = false;
-
             _eventPipeProviders = providers.Where(provider => provider.Type.HasFlag(MetricType.EventCounter))
                 .Select((MetricEventPipeProvider provider) => new EventPipeProvider(provider.Provider,
                     EventLevel.Informational,
@@ -97,5 +95,7 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
             });
 
         public override IList<EventPipeProvider> GetProviders() => _eventPipeProviders;
+
+        public override long GetRundownKeyword(bool rundownKeywordSupported) => 0;
     }
 }

@@ -9,12 +9,6 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
 {
     public sealed class HttpRequestSourceConfiguration : MonitoringSourceConfiguration
     {
-        public HttpRequestSourceConfiguration()
-        {
-            //CONSIDER removing rundown for this scenario.
-            RequestRundown = true;
-        }
-
         // This string is shared between HttpRequestSourceConfiguration and AspNetTriggerSourceConfiguration
         // due to an issue that causes the FilterAndPayloadSpecs to be overwritten but never reverted.
         // This caused http traces to interfere with AspNet* triggers due to having different arguments.
@@ -76,5 +70,8 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
 
             return providers;
         }
+
+        //CONSIDER removing rundown for this scenario.
+        public override long GetRundownKeyword(bool rundownKeywordSupported) => EventPipeSessionConfiguration.DefaultRundownKeyword;
     }
 }

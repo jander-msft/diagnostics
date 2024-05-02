@@ -4,7 +4,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 
 namespace Microsoft.Diagnostics.NETCore.Client
 {
@@ -16,6 +15,10 @@ namespace Microsoft.Diagnostics.NETCore.Client
 
     public sealed class EventPipeSessionConfiguration
     {
+        public const long DefaultRundownKeyword = 0x80020139;
+
+        private Func<bool, long> _getRundownKeyword;
+
         /// <summary>
         /// Creates a new configuration object for the EventPipeSession.
         /// For details, see the documentation of each property of this object.
@@ -28,14 +31,14 @@ namespace Microsoft.Diagnostics.NETCore.Client
             IEnumerable<EventPipeProvider> providers,
             int circularBufferSizeMB = 256,
             bool requestRundown = true,
-            bool requestStackwalk = true) : this(circularBufferSizeMB, EventPipeSerializationFormat.NetTrace, providers, requestRundown, requestStackwalk)
-        {}
+            bool requestStackwalk = true) : this(circularBufferSizeMB, EventPipeSerializationFormat.NetTrace, providers, _ => requestRundown ? DefaultRundownKeyword : 0, requestStackwalk)
+        { }
 
-        private EventPipeSessionConfiguration(
+        internal EventPipeSessionConfiguration(
             int circularBufferSizeMB,
             EventPipeSerializationFormat format,
             IEnumerable<EventPipeProvider> providers,
-            bool requestRundown,
+            Func<bool, long> getRundownKeyword,
             bool requestStackwalk)
         {
             if (circularBufferSizeMB == 0)
@@ -61,8 +64,9 @@ namespace Microsoft.Diagnostics.NETCore.Client
 
             CircularBufferSizeInMB = circularBufferSizeMB;
             Format = format;
-            RequestRundown = requestRundown;
             RequestStackwalk = requestStackwalk;
+
+            _getRundownKeyword = getRundownKeyword;
         }
 
         /// <summary>
@@ -73,7 +77,7 @@ namespace Microsoft.Diagnostics.NETCore.Client
         /// <item>Consider to set this parameter to false if you don't need stacktrace information or if you're analyzing events on the fly.</item>
         /// </list>
         /// </summary>
-        public bool RequestRundown { get; }
+        public bool RequestRundown => 0 != GetRundownKeyword(rundownKeywordSupported: false);
 
         /// <summary>
         /// The size of the runtime's buffer for collecting events in MB.
@@ -96,6 +100,16 @@ namespace Microsoft.Diagnostics.NETCore.Client
         /// Providers to enable for this session.
         /// </summary>
         public IReadOnlyCollection<EventPipeProvider> Providers => _providers.AsReadOnly();
+
+        /// <summary>
+        /// Determines the rundown keyword to provide to the event pipe session.
+        /// </summary>
+        /// <param name="rundownKeywordSupported">Reports whether the runtime supports specifying the rundown keyword.</param>
+        /// <remarks>
+        /// In the case that the runtime does not support specifying the rundown keyword, this method can return
+        /// non-zero keyword to indicate that the default rundown events should be reported.
+        /// </remarks>
+        public long GetRundownKeyword(bool rundownKeywordSupported) => _getRundownKeyword(rundownKeywordSupported);
 
         private readonly List<EventPipeProvider> _providers;
 

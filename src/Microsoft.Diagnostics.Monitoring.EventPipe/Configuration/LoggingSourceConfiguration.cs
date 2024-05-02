@@ -24,7 +24,6 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
         public LoggingSourceConfiguration(LogLevel level, LogMessageType messageType, IDictionary<string, LogLevel?> filterSpecs, bool useAppFilters,
             bool collectScopes)
         {
-            RequestRundown = false;
             _filterSpecs = ToFilterSpecsString(filterSpecs, useAppFilters);
             _keywords = (long)ToKeywords(messageType);
             _level = ToEventLevel(level);
@@ -57,6 +56,8 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
 
             return providers;
         }
+
+        public override long GetRundownKeyword(bool rundownKeywordSupported) => 0;
 
         private static string ToFilterSpecsString(IDictionary<string, LogLevel?> filterSpecs, bool useAppFilters)
         {

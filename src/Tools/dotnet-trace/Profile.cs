@@ -1,6 +1,7 @@
 ﻿// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.Diagnostics.NETCore.Client;
@@ -9,11 +10,19 @@ namespace Microsoft.Diagnostics.Tools.Trace
 {
     internal sealed class Profile
     {
-        public Profile(string name, IEnumerable<EventPipeProvider> providers, string description)
+        private Func<bool, long> _getRundownKeyword;
+
+        public Profile(string name, IEnumerable<EventPipeProvider> providers, string description) :
+            this(name, providers, description, _ => EventPipeSessionConfiguration.DefaultRundownKeyword)
+        {
+        }
+
+        public Profile(string name, IEnumerable<EventPipeProvider> providers, string description, Func<bool, long> getRundownKeyword)
         {
             Name = name;
             Providers = providers == null ? Enumerable.Empty<EventPipeProvider>() : new List<EventPipeProvider>(providers).AsReadOnly();
             Description = description;
+            _getRundownKeyword = getRundownKeyword;
         }
 
         public string Name { get; }
@@ -22,7 +31,7 @@ namespace Microsoft.Diagnostics.Tools.Trace
 
         public string Description { get; }
 
-        public bool Rundown { get; set; } = true;
+        public long GetRundownKeyword(bool rundownKeywordSupported) => _getRundownKeyword(rundownKeywordSupported);
 
         public static void MergeProfileAndProviders(Profile selectedProfile, List<EventPipeProvider> providerCollection, Dictionary<string, string> enabledBy)
         {

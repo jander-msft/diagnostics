@@ -125,7 +125,7 @@ namespace Microsoft.Diagnostics.Tools.Trace
                     enabledBy[providerCollectionProvider.Name] = "--providers ";
                 }
 
-                bool collectRundownEvents = true;
+                Func<bool, long> getRundownKeyword = _ => EventPipeSessionConfiguration.DefaultRundownKeyword;
 
                 if (profile.Length != 0)
                 {
@@ -137,14 +137,14 @@ namespace Microsoft.Diagnostics.Tools.Trace
                         return (int)ReturnCode.ArgumentError;
                     }
 
-                    collectRundownEvents = selectedProfile.Rundown;
+                    getRundownKeyword = selectedProfile.GetRundownKeyword;
 
                     Profile.MergeProfileAndProviders(selectedProfile, providerCollection, enabledBy);
                 }
 
                 if (rundown.HasValue)
                 {
-                    collectRundownEvents = rundown.Value;
+                    getRundownKeyword = _ => rundown.HasValue ? EventPipeSessionConfiguration.DefaultRundownKeyword : 0;
                 }
 
                 // Parse --clrevents parameter
@@ -271,7 +271,8 @@ namespace Microsoft.Diagnostics.Tools.Trace
                         EventPipeSession session = null;
                         try
                         {
-                            session = diagnosticsClient.StartEventPipeSession(providerCollection, collectRundownEvents, (int)buffersize);
+                            EventPipeSessionConfiguration sessionConfig = new((int)buffersize, EventPipeSerializationFormat.NetTrace, providerCollection, getRundownKeyword, requestStackwalk: false);
+                            session = diagnosticsClient.StartEventPipeSession(sessionConfig);
                             if (resumeRuntime)
                             {
                                 try

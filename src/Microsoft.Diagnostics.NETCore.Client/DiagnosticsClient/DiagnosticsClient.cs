@@ -127,6 +127,18 @@ namespace Microsoft.Diagnostics.NETCore.Client
         /// Start tracing the application and return an EventPipeSession object
         /// </summary>
         /// <param name="configuration">Configuration of this EventPipeSession</param>
+        /// <returns>
+        /// An EventPipeSession object representing the EventPipe session that just started.
+        /// </returns>
+        public EventPipeSession StartEventPipeSession(EventPipeSessionConfiguration configuration)
+        {
+            return EventPipeSession.Start(_endpoint, configuration);
+        }
+
+        /// <summary>
+        /// Start tracing the application and return an EventPipeSession object
+        /// </summary>
+        /// <param name="configuration">Configuration of this EventPipeSession</param>
         /// <param name="token">The token to monitor for cancellation requests.</param>
         /// <returns>
         /// An EventPipeSession object representing the EventPipe session that just started.
