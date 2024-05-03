@@ -32,7 +32,9 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
 
         public abstract IList<EventPipeProvider> GetProviders();
 
-        public virtual long GetRundownKeyword(bool rundownKeywordSupported) => EventPipeSessionConfiguration.DefaultRundownKeyword;
+        public virtual bool IncludeDefaultRundownKeywords => true;
+
+        public virtual long AdditionalRundownKeywords => 0;
 
         public virtual int BufferSizeInMB => 256;
     }

@@ -17,8 +17,6 @@ namespace Microsoft.Diagnostics.NETCore.Client
     {
         public const long DefaultRundownKeyword = 0x80020139;
 
-        private Func<bool, long> _getRundownKeyword;
-
         /// <summary>
         /// Creates a new configuration object for the EventPipeSession.
         /// For details, see the documentation of each property of this object.
@@ -31,15 +29,17 @@ namespace Microsoft.Diagnostics.NETCore.Client
             IEnumerable<EventPipeProvider> providers,
             int circularBufferSizeMB = 256,
             bool requestRundown = true,
-            bool requestStackwalk = true) : this(circularBufferSizeMB, EventPipeSerializationFormat.NetTrace, providers, _ => requestRundown ? DefaultRundownKeyword : 0, requestStackwalk)
+            bool requestStackwalk = true) : this(circularBufferSizeMB, EventPipeSerializationFormat.NetTrace, providers, requestStackwalk, requestRundown, 0)
         { }
 
         internal EventPipeSessionConfiguration(
             int circularBufferSizeMB,
             EventPipeSerializationFormat format,
             IEnumerable<EventPipeProvider> providers,
-            Func<bool, long> getRundownKeyword,
-            bool requestStackwalk)
+            bool requestStackwalk,
+            bool includeDefaultRundownKeywords,
+            long additionalRundownKeywords
+            )
         {
             if (circularBufferSizeMB == 0)
             {
@@ -65,8 +65,8 @@ namespace Microsoft.Diagnostics.NETCore.Client
             CircularBufferSizeInMB = circularBufferSizeMB;
             Format = format;
             RequestStackwalk = requestStackwalk;
-
-            _getRundownKeyword = getRundownKeyword;
+            IncludeDefaultRundownKeywords = includeDefaultRundownKeywords;
+            AdditionalRundownKeywords = additionalRundownKeywords;
         }
 
         /// <summary>
@@ -77,7 +77,13 @@ namespace Microsoft.Diagnostics.NETCore.Client
         /// <item>Consider to set this parameter to false if you don't need stacktrace information or if you're analyzing events on the fly.</item>
         /// </list>
         /// </summary>
-        public bool RequestRundown => 0 != GetRundownKeyword(rundownKeywordSupported: false);
+        public bool RequestRundown => IncludeDefaultRundownKeywords | AdditionalRundownKeywords != 0;
+
+        internal bool IncludeDefaultRundownKeywords { get; }
+
+        internal long AdditionalRundownKeywords { get; }
+
+        internal long EffectiveRundownKeywords => IncludeDefaultRundownKeywords ? EventPipeSessionConfiguration.DefaultRundownKeyword : 0 | AdditionalRundownKeywords;
 
         /// <summary>
         /// The size of the runtime's buffer for collecting events in MB.
@@ -101,16 +107,6 @@ namespace Microsoft.Diagnostics.NETCore.Client
         /// </summary>
         public IReadOnlyCollection<EventPipeProvider> Providers => _providers.AsReadOnly();
 
-        /// <summary>
-        /// Determines the rundown keyword to provide to the event pipe session.
-        /// </summary>
-        /// <param name="rundownKeywordSupported">Reports whether the runtime supports specifying the rundown keyword.</param>
-        /// <remarks>
-        /// In the case that the runtime does not support specifying the rundown keyword, this method can return
-        /// non-zero keyword to indicate that the default rundown events should be reported.
-        /// </remarks>
-        public long GetRundownKeyword(bool rundownKeywordSupported) => _getRundownKeyword(rundownKeywordSupported);
-
         private readonly List<EventPipeProvider> _providers;
 
         internal EventPipeSerializationFormat Format { get; }
@@ -126,7 +122,7 @@ namespace Microsoft.Diagnostics.NETCore.Client
             {
                 writer.Write(config.CircularBufferSizeInMB);
                 writer.Write((uint)config.Format);
-                writer.Write(config.RequestRundown);
+                writer.Write(config.IncludeDefaultRundownKeywords);
 
                 SerializeProviders(config, writer);
 
@@ -145,7 +141,7 @@ namespace Microsoft.Diagnostics.NETCore.Client
             {
                 writer.Write(config.CircularBufferSizeInMB);
                 writer.Write((uint)config.Format);
-                writer.Write(config.RequestRundown);
+                writer.Write(config.IncludeDefaultRundownKeywords);
                 writer.Write(config.RequestStackwalk);
 
                 SerializeProviders(config, writer);
@@ -165,7 +161,7 @@ namespace Microsoft.Diagnostics.NETCore.Client
             {
                 writer.Write(config.CircularBufferSizeInMB);
                 writer.Write((uint)config.Format);
-                writer.Write(config.GetRundownKeyword(rundownKeywordSupported: true));
+                writer.Write(config.EffectiveRundownKeywords);
                 writer.Write(config.RequestStackwalk);
 
                 SerializeProviders(config, writer);

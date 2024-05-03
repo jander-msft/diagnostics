@@ -125,7 +125,8 @@ namespace Microsoft.Diagnostics.Tools.Trace
                     enabledBy[providerCollectionProvider.Name] = "--providers ";
                 }
 
-                Func<bool, long> getRundownKeyword = _ => EventPipeSessionConfiguration.DefaultRundownKeyword;
+                bool includeDefaultRundownKeywords = false;
+                long additionalRundownKeywords = 0;
 
                 if (profile.Length != 0)
                 {
@@ -137,14 +138,15 @@ namespace Microsoft.Diagnostics.Tools.Trace
                         return (int)ReturnCode.ArgumentError;
                     }
 
-                    getRundownKeyword = selectedProfile.GetRundownKeyword;
+                    additionalRundownKeywords = selectedProfile.AdditionalRundownKeywords;
+                    includeDefaultRundownKeywords = selectedProfile.IncludeDefaultRundownKeywords;
 
                     Profile.MergeProfileAndProviders(selectedProfile, providerCollection, enabledBy);
                 }
 
                 if (rundown.HasValue)
                 {
-                    getRundownKeyword = _ => rundown.HasValue ? EventPipeSessionConfiguration.DefaultRundownKeyword : 0;
+                    includeDefaultRundownKeywords = true;
                 }
 
                 // Parse --clrevents parameter
@@ -271,7 +273,7 @@ namespace Microsoft.Diagnostics.Tools.Trace
                         EventPipeSession session = null;
                         try
                         {
-                            EventPipeSessionConfiguration sessionConfig = new((int)buffersize, EventPipeSerializationFormat.NetTrace, providerCollection, getRundownKeyword, requestStackwalk: false);
+                            EventPipeSessionConfiguration sessionConfig = new((int)buffersize, EventPipeSerializationFormat.NetTrace, providerCollection, requestStackwalk: false, includeDefaultRundownKeywords, additionalRundownKeywords);
                             session = diagnosticsClient.StartEventPipeSession(sessionConfig);
                             if (resumeRuntime)
                             {
@@ -335,12 +337,10 @@ namespace Microsoft.Diagnostics.Tools.Trace
                                     stoppingEventProviderName,
                                     stoppingEventEventName,
                                     payloadFilter,
-                                    onEvent: (traceEvent) =>
-                                    {
+                                    onEvent: (traceEvent) => {
                                         shouldExit.Set();
                                     },
-                                    onPayloadFilterMismatch: (traceEvent) =>
-                                    {
+                                    onPayloadFilterMismatch: (traceEvent) => {
                                         ConsoleWriteLine($"One or more field names specified in the payload filter for event '{traceEvent.ProviderName}/{traceEvent.EventName}' do not match any of the known field names: '{string.Join(' ', traceEvent.PayloadNames)}'. As a result the requested stopping event is unreachable; will continue to collect the trace for the remaining specified duration.");
                                     },
                                     eventStream: new PassthroughStream(session.EventStream, fs, (int)buffersize, leaveDestinationStreamOpen: true),

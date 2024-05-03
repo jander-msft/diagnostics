@@ -23,6 +23,6 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
             return providers;
         }
 
-        public override long GetRundownKeyword(bool rundownKeywordSupported) => 0;
+        public override bool IncludeDefaultRundownKeywords => false;
     }
 }

@@ -96,6 +96,6 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
 
         public override IList<EventPipeProvider> GetProviders() => _eventPipeProviders;
 
-        public override long GetRundownKeyword(bool rundownKeywordSupported) => 0;
+        public override bool IncludeDefaultRundownKeywords => false;
     }
 }

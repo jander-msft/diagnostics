@@ -7,6 +7,7 @@ using Microsoft.Diagnostics.NETCore.Client;
 
 namespace Microsoft.Diagnostics.Monitoring.EventPipe
 {
+    //CONSIDER removing rundown for this scenario.
     public sealed class HttpRequestSourceConfiguration : MonitoringSourceConfiguration
     {
         // This string is shared between HttpRequestSourceConfiguration and AspNetTriggerSourceConfiguration
@@ -70,8 +71,5 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
 
             return providers;
         }
-
-        //CONSIDER removing rundown for this scenario.
-        public override long GetRundownKeyword(bool rundownKeywordSupported) => EventPipeSessionConfiguration.DefaultRundownKeyword;
     }
 }

@@ -28,7 +28,7 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
             EventPipeSession session = null;
             try
             {
-                EventPipeSessionConfiguration sessionConfig = new(_sourceConfig.BufferSizeInMB, EventPipeSerializationFormat.NetTrace, _sourceConfig.GetProviders(), _sourceConfig.GetRundownKeyword, requestStackwalk: false);
+                EventPipeSessionConfiguration sessionConfig = new(_sourceConfig.BufferSizeInMB, EventPipeSerializationFormat.NetTrace, _sourceConfig.GetProviders(), requestStackwalk: false, _sourceConfig.IncludeDefaultRundownKeywords, _sourceConfig.AdditionalRundownKeywords);
                 session = await client.StartEventPipeSessionAsync(sessionConfig, cancellationToken).ConfigureAwait(false);
                 if (resumeRuntime)
                 {

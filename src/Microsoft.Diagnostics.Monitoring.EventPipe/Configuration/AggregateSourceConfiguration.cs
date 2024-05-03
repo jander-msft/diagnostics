@@ -22,9 +22,8 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
             return _configurations.SelectMany(c => c.GetProviders()).ToList();
         }
 
-        public override long GetRundownKeyword(bool rundownKeywordSupported)
-        {
-            return _configurations.Select(c => c.GetRundownKeyword(rundownKeywordSupported)).Aggregate((x, y) => x | y);
-        }
+        public override bool IncludeDefaultRundownKeywords => _configurations.Any(c => c.IncludeDefaultRundownKeywords);
+
+        public override long AdditionalRundownKeywords => _configurations.Select(c => c.AdditionalRundownKeywords).Aggregate((x, y) => x | y);
     }
 }

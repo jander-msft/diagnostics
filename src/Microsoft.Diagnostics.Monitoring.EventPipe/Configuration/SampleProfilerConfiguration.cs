@@ -17,6 +17,6 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
 
         public override int BufferSizeInMB => 1;
 
-        public override long GetRundownKeyword(bool rundownKeywordSupported) => 0;
+        public override bool IncludeDefaultRundownKeywords => false;
     }
 }

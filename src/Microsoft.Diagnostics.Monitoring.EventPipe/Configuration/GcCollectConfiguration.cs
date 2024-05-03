@@ -15,6 +15,8 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
                 new EventPipeProvider("Microsoft-Windows-DotNETRuntimePrivate", System.Diagnostics.Tracing.EventLevel.Informational, (long) Tracing.Parsers.ClrTraceEventParser.Keywords.GC),
             };
 
-        public override long GetRundownKeyword(bool rundownKeywordSupported) => rundownKeywordSupported ? (long)Tracing.Parsers.ClrTraceEventParser.Keywords.GC : 0;
+        public override bool IncludeDefaultRundownKeywords => false;
+
+        public override long AdditionalRundownKeywords => (long)Tracing.Parsers.ClrTraceEventParser.Keywords.GC;
     }
 }

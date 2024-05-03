@@ -25,7 +25,7 @@ namespace Microsoft.Diagnostics.Monitoring.EventPipe
             return _providers.ToList();
         }
 
-        public override long GetRundownKeyword(bool rundownKeywordSupported) => _requestRundown ? EventPipeSessionConfiguration.DefaultRundownKeyword : 0;
+        public override bool IncludeDefaultRundownKeywords => _requestRundown;
 
         public override int BufferSizeInMB => _bufferSizeInMB;
     }

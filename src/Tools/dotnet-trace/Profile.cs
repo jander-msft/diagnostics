@@ -1,7 +1,6 @@
 ﻿// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using System;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.Diagnostics.NETCore.Client;
@@ -10,19 +9,18 @@ namespace Microsoft.Diagnostics.Tools.Trace
 {
     internal sealed class Profile
     {
-        private Func<bool, long> _getRundownKeyword;
-
         public Profile(string name, IEnumerable<EventPipeProvider> providers, string description) :
-            this(name, providers, description, _ => EventPipeSessionConfiguration.DefaultRundownKeyword)
+            this(name, providers, description, includeDefaultRundownKeywords: true, additionalRundownKeywords: 0)
         {
         }
 
-        public Profile(string name, IEnumerable<EventPipeProvider> providers, string description, Func<bool, long> getRundownKeyword)
+        public Profile(string name, IEnumerable<EventPipeProvider> providers, string description, bool includeDefaultRundownKeywords, long additionalRundownKeywords)
         {
             Name = name;
             Providers = providers == null ? Enumerable.Empty<EventPipeProvider>() : new List<EventPipeProvider>(providers).AsReadOnly();
             Description = description;
-            _getRundownKeyword = getRundownKeyword;
+            IncludeDefaultRundownKeywords = includeDefaultRundownKeywords;
+            AdditionalRundownKeywords = additionalRundownKeywords;
         }
 
         public string Name { get; }
@@ -31,7 +29,9 @@ namespace Microsoft.Diagnostics.Tools.Trace
 
         public string Description { get; }
 
-        public long GetRundownKeyword(bool rundownKeywordSupported) => _getRundownKeyword(rundownKeywordSupported);
+        public bool IncludeDefaultRundownKeywords { get; set; }
+
+        public long AdditionalRundownKeywords { get; set; }
 
         public static void MergeProfileAndProviders(Profile selectedProfile, List<EventPipeProvider> providerCollection, Dictionary<string, string> enabledBy)
         {
