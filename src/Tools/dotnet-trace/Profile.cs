@@ -9,18 +9,11 @@ namespace Microsoft.Diagnostics.Tools.Trace
 {
     internal sealed class Profile
     {
-        public Profile(string name, IEnumerable<EventPipeProvider> providers, string description) :
-            this(name, providers, description, includeDefaultRundownKeywords: true, additionalRundownKeywords: 0)
-        {
-        }
-
-        public Profile(string name, IEnumerable<EventPipeProvider> providers, string description, bool includeDefaultRundownKeywords, long additionalRundownKeywords)
+        public Profile(string name, IEnumerable<EventPipeProvider> providers, string description)
         {
             Name = name;
             Providers = providers == null ? Enumerable.Empty<EventPipeProvider>() : new List<EventPipeProvider>(providers).AsReadOnly();
             Description = description;
-            IncludeDefaultRundownKeywords = includeDefaultRundownKeywords;
-            AdditionalRundownKeywords = additionalRundownKeywords;
         }
 
         public string Name { get; }
@@ -29,7 +22,7 @@ namespace Microsoft.Diagnostics.Tools.Trace
 
         public string Description { get; }
 
-        public bool IncludeDefaultRundownKeywords { get; set; }
+        public bool IncludeDefaultRundownKeywords { get; set; } = true;
 
         public long AdditionalRundownKeywords { get; set; }
 
