@@ -81,7 +81,7 @@ namespace Microsoft.Diagnostics.NETCore.Client
                 requestMessage = CreateStartMessage(config, config.RequestStackwalk ? EventPipeCommandId.CollectTracing2 : EventPipeCommandId.CollectTracing3);
                 response = IpcClient.SendMessageGetContinuation(endpoint, requestMessage);
 
-                DiagnosticsClient.ValidateResponseMessage(response.Value.Message, nameof(Start));
+                DiagnosticsClient.ValidateResponseMessage(response.Value.Message, nameof(StartAsync));
 
                 return CreateSessionFromResponse(endpoint, ref response);
             }
