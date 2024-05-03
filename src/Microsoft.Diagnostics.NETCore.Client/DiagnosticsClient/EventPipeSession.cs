@@ -29,38 +29,40 @@ namespace Microsoft.Diagnostics.NETCore.Client
 
         internal static EventPipeSession Start(IpcEndpoint endpoint, EventPipeSessionConfiguration config)
         {
-            IpcMessage requestMessage = CreateStartMessage(config, EventPipeCommandId.CollectTracing4);
-            IpcResponse? response = IpcClient.SendMessageGetContinuation(endpoint, requestMessage);
+            IpcResponse? response = null;
             try
             {
-                EventPipeSession session = null;
-                if (DiagnosticsClient.ValidateResponseMessage(response.Value.Message, nameof(StartAsync), DiagnosticsClient.ValidateResponseOptions.UnknownCommandReturnsFalse))
+                IpcMessage requestMessage;
+
+                // Only attempt v4 command if custom rundown keywords are provided.
+                if (config.AdditionalRundownKeywords != 0)
                 {
-                    session = CreateSessionFromResponse(endpoint, ref response);
-                    // The session owns the continuation stream
-                    response = null;
-                    return session;
+                    requestMessage = CreateStartMessage(config, EventPipeCommandId.CollectTracing4);
+                    response = IpcClient.SendMessageGetContinuation(endpoint, requestMessage);
+
+                    if (DiagnosticsClient.ValidateResponseMessage(response.Value.Message, nameof(Start), DiagnosticsClient.ValidateResponseOptions.UnknownCommandReturnsFalse))
+                    {
+                        return CreateSessionFromResponse(endpoint, ref response);
+                    }
                 }
 
-                requestMessage = CreateStartMessage(config, EventPipeCommandId.CollectTracing3);
-                response = IpcClient.SendMessageGetContinuation(endpoint, requestMessage);
-
-                if (DiagnosticsClient.ValidateResponseMessage(response.Value.Message, nameof(StartAsync), DiagnosticsClient.ValidateResponseOptions.UnknownCommandReturnsFalse))
+                // Only attempt v3 command if stack walk is not requested
+                if (!config.RequestStackwalk)
                 {
-                    session = CreateSessionFromResponse(endpoint, ref response);
-                    // The session owns the continuation stream
-                    response = null;
-                    return session;
+                    requestMessage = CreateStartMessage(config, EventPipeCommandId.CollectTracing3);
+                    response = IpcClient.SendMessageGetContinuation(endpoint, requestMessage);
+
+                    if (DiagnosticsClient.ValidateResponseMessage(response.Value.Message, nameof(Start), DiagnosticsClient.ValidateResponseOptions.UnknownCommandReturnsFalse))
+                    {
+                        return CreateSessionFromResponse(endpoint, ref response);
+                    }
                 }
 
                 requestMessage = CreateStartMessage(config, EventPipeCommandId.CollectTracing2);
                 response = IpcClient.SendMessageGetContinuation(endpoint, requestMessage);
-                DiagnosticsClient.ValidateResponseMessage(response.Value.Message, nameof(StartAsync));
+                DiagnosticsClient.ValidateResponseMessage(response.Value.Message, nameof(Start));
 
-                session = CreateSessionFromResponse(endpoint, ref response);
-                // The session owns the continuation stream
-                response = null;
-                return session;
+                return CreateSessionFromResponse(endpoint, ref response);
             }
             finally
             {
@@ -70,38 +72,40 @@ namespace Microsoft.Diagnostics.NETCore.Client
 
         internal static async Task<EventPipeSession> StartAsync(IpcEndpoint endpoint, EventPipeSessionConfiguration config, CancellationToken cancellationToken)
         {
-            IpcMessage requestMessage = CreateStartMessage(config, EventPipeCommandId.CollectTracing4);
-            IpcResponse? response = await IpcClient.SendMessageGetContinuationAsync(endpoint, requestMessage, cancellationToken).ConfigureAwait(false);
+            IpcResponse? response = null;
             try
             {
-                EventPipeSession session = null;
-                if (DiagnosticsClient.ValidateResponseMessage(response.Value.Message, nameof(StartAsync), DiagnosticsClient.ValidateResponseOptions.UnknownCommandReturnsFalse))
+                IpcMessage requestMessage;
+
+                // Only attempt v4 command if custom rundown keywords are provided.
+                if (config.AdditionalRundownKeywords != 0)
                 {
-                    session = CreateSessionFromResponse(endpoint, ref response);
-                    // The session owns the continuation stream
-                    response = null;
-                    return session;
+                    requestMessage = CreateStartMessage(config, EventPipeCommandId.CollectTracing4);
+                    response = await IpcClient.SendMessageGetContinuationAsync(endpoint, requestMessage, cancellationToken).ConfigureAwait(false);
+
+                    if (DiagnosticsClient.ValidateResponseMessage(response.Value.Message, nameof(StartAsync), DiagnosticsClient.ValidateResponseOptions.UnknownCommandReturnsFalse))
+                    {
+                        return CreateSessionFromResponse(endpoint, ref response);
+                    }
                 }
 
-                requestMessage = CreateStartMessage(config, EventPipeCommandId.CollectTracing3);
-                response = await IpcClient.SendMessageGetContinuationAsync(endpoint, requestMessage, cancellationToken).ConfigureAwait(false);
-
-                if (DiagnosticsClient.ValidateResponseMessage(response.Value.Message, nameof(StartAsync), DiagnosticsClient.ValidateResponseOptions.UnknownCommandReturnsFalse))
+                // Only attempt v3 command if stack walk is not requested
+                if (!config.RequestStackwalk)
                 {
-                    session = CreateSessionFromResponse(endpoint, ref response);
-                    // The session owns the continuation stream
-                    response = null;
-                    return session;
+                    requestMessage = CreateStartMessage(config, EventPipeCommandId.CollectTracing3);
+                    response = await IpcClient.SendMessageGetContinuationAsync(endpoint, requestMessage, cancellationToken).ConfigureAwait(false);
+
+                    if (DiagnosticsClient.ValidateResponseMessage(response.Value.Message, nameof(StartAsync), DiagnosticsClient.ValidateResponseOptions.UnknownCommandReturnsFalse))
+                    {
+                        return CreateSessionFromResponse(endpoint, ref response);
+                    }
                 }
 
                 requestMessage = CreateStartMessage(config, EventPipeCommandId.CollectTracing2);
                 response = await IpcClient.SendMessageGetContinuationAsync(endpoint, requestMessage, cancellationToken).ConfigureAwait(false);
                 DiagnosticsClient.ValidateResponseMessage(response.Value.Message, nameof(StartAsync));
 
-                session = CreateSessionFromResponse(endpoint, ref response);
-                // The session owns the continuation stream
-                response = null;
-                return session;
+                return CreateSessionFromResponse(endpoint, ref response);
             }
             finally
             {
