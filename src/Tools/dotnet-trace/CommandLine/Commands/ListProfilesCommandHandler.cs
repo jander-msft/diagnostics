@@ -78,7 +78,7 @@ namespace Microsoft.Diagnostics.Tools.Trace
                 "Tracks GC collections only at very low overhead.")
                 {
                     IncludeDefaultRundownKeywords = false,
-                    AdditionalRundownKeywords = (long)Tracing.Parsers.ClrTraceEventParser.Keywords.GC),
+                    AdditionalRundownKeywords = (long)Tracing.Parsers.ClrTraceEventParser.Keywords.GC,
                 },
             new Profile(
                 "database",
